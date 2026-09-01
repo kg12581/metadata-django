@@ -19,6 +19,18 @@
 
 <div class="card">
   <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h3 style="margin:0 0 4px">作业自动同步 (结构变更监控)</h3>
+      <div class="muted">监控源表元数据与上次生成的 Flink SQL; 发现差异可一键 savepoint 停止 -> 重新生成 -> 重启</div>
+    </div>
+    <button class="btn ghost" onclick="loadJobs()">刷新状态</button>
+  </div>
+  <div id="jobList"></div>
+  <pre id="syncResult" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:420px;font-size:12px;margin-top:12px"></pre>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
     <h3 id="fileTitle" style="margin:0">SQL 内容</h3>
     <div style="display:flex;gap:8px">
       <button class="btn ghost" onclick="copyContent()">复制</button>
@@ -34,6 +46,91 @@
 <script>
 let currentFile = '';
 let currentContent = '';
+
+async function loadJobs() {
+  const resp = await fetch('/api/metadata/flink-sync/jobs/');
+  const data = await resp.json();
+  const list = document.getElementById('jobList');
+  list.innerHTML = '';
+  const jobs = (data.data && data.data.jobs) || [];
+  jobs.forEach(renderJob);
+  if (!jobs.length) list.textContent = '无作业配置';
+}
+
+function renderJob(j) {
+  const card = document.createElement('div');
+  card.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:10px';
+  const header = document.createElement('div');
+  header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap';
+  const left = document.createElement('div');
+  const title = document.createElement('div');
+  title.innerHTML = '<strong class="mono">' + (j.job || '') + '</strong> <span class="muted">' + (j.source || '') + '</span>';
+  const meta = document.createElement('div');
+  meta.className = 'muted';
+  meta.textContent = '字段数: ' + (j.columns_count ?? '-') + ' · 运行状态: ' + (j.running ? (j.running.state || '-') : '-');
+  left.appendChild(title);
+  left.appendChild(meta);
+  header.appendChild(left);
+  const diff = j.diff || {};
+  const diffText = [];
+  if (j.first_time) diffText.push('首次生成');
+  if (diff.add && diff.add.length) diffText.push('新增: ' + diff.add.join(','));
+  if (diff.drop && diff.drop.length) diffText.push('删除: ' + diff.drop.join(','));
+  if (diff.modify && diff.modify.length) diffText.push('修改: ' + diff.modify.map(m => m.column + ' ' + m.old + '->' + m.new).join(','));
+  const badge = document.createElement('span');
+  badge.className = 'badge ' + (diffText.length ? 'error' : 'synced');
+  badge.textContent = diffText.length ? '有变更' : '结构一致';
+  header.appendChild(badge);
+  card.appendChild(header);
+  if (diffText.length) {
+    const d = document.createElement('div');
+    d.className = 'muted';
+    d.style.cssText = 'margin:8px 0';
+    d.textContent = diffText.join(' | ');
+    card.appendChild(d);
+  }
+  if (j.error) {
+    const e = document.createElement('div');
+    e.className = 'muted danger';
+    e.textContent = '错误: ' + j.error;
+    card.appendChild(e);
+  }
+  const buttons = document.createElement('div');
+  buttons.style.cssText = 'display:flex;gap:8px;margin-top:10px';
+  const makeBtn = (label, cls, fn) => {
+    const b = document.createElement('button');
+    b.className = 'btn ' + cls;
+    b.textContent = label;
+    b.onclick = fn;
+    buttons.appendChild(b);
+    return b;
+  };
+  makeBtn('生成 SQL', 'ghost', () => jobAction(j.job, 'generate'));
+  makeBtn('执行变更并重启', '', () => jobAction(j.job, 'apply'));
+  card.appendChild(buttons);
+  list.appendChild(card);
+}
+
+async function jobAction(job, action) {
+  if (action === 'apply' && !confirm('将执行: savepoint 停止作业 -> 重新生成 SQL -> 重启。确定吗？')) return;
+  showSync({ job: job, action: action, message: '处理中...' });
+  try {
+    const resp = await fetch('/api/metadata/flink-sync/' + action + '/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ job: job, doris_sync: true })
+    });
+    showSync(await resp.json());
+  } catch (err) {
+    showSync('调用失败: ' + err);
+  }
+}
+
+function showSync(text) {
+  const pre = document.getElementById('syncResult');
+  pre.style.display = 'block';
+  pre.textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+}
 
 async function loadFiles() {
   const resp = await fetch('/api/metadata/flink-sql/files/');
@@ -87,5 +184,6 @@ function showCommands() {
 }
 
 loadFiles();
+loadJobs();
 </script>
 {% endblock %}

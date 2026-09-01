@@ -24,4 +24,7 @@ urlpatterns = [
     path("etl/log/", views.etl_log_view, name="etl-log"),
     path("flink-sql/files/", views.flink_sql_files, name="flink-sql-files"),
     path("flink-sql/file/", views.flink_sql_file, name="flink-sql-file"),
+    path("flink-sync/jobs/", views.flink_sync_jobs, name="flink-sync-jobs"),
+    path("flink-sync/generate/", views.flink_sync_generate, name="flink-sync-generate"),
+    path("flink-sync/apply/", views.flink_sync_apply, name="flink-sync-apply"),
 ]

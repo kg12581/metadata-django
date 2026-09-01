@@ -43,7 +43,7 @@ class PostgreSQLReader(MetadataReader):
               AND schema_name NOT LIKE 'pg_temp%'
             ORDER BY schema_name
             """,
-            {},
+            None,
         )
         return [row["schema_name"] for row in rows]
 
@@ -91,7 +91,7 @@ class PostgreSQLReader(MetadataReader):
                    c.numeric_precision,
                    c.numeric_scale,
                    col_description(
-                       format('%I.%I', c.table_schema, c.table_name)::regclass::oid,
+                       format('%%I.%%I', c.table_schema, c.table_name)::regclass::oid,
                        c.ordinal_position
                    ) AS comment
             FROM information_schema.columns c

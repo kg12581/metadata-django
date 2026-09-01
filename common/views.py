@@ -16,6 +16,7 @@ from .config import get_datax_config, get_database_config, get_doris_config
 from .models import MetadataDatabase, MetadataTable
 from .serializers import database_to_dict, table_to_dict
 from .services.datax_sync import sync_table_data
+from .services.flink_sync import apply_job, check_all_jobs, generate_job
 from .services.schema_check import check_tables
 from .services.schema_sync import sync_table_schema
 from .services.sync import sync_metadata
@@ -84,6 +85,9 @@ def index(request):
                 "GET  /api/metadata/etl/log/",
                 "GET  /api/metadata/flink-sql/files/",
                 "GET  /api/metadata/flink-sql/file/?name=xxx.sql",
+                "GET  /api/metadata/flink-sync/jobs/",
+                "POST /api/metadata/flink-sync/generate/",
+                "POST /api/metadata/flink-sync/apply/",
             ]
         }
     )
@@ -728,3 +732,38 @@ def flink_sql_file(request):
     return _ok(
         {"name": name, "content": path.read_text(encoding="utf-8", errors="replace")}
     )
+
+
+@require_GET
+def flink_sync_jobs(request):
+    return _ok(check_all_jobs())
+
+
+@csrf_exempt
+@require_POST
+def flink_sync_generate(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    try:
+        result = generate_job((payload or {}).get("job"))
+    except Exception as exc:
+        return _fail(f"生成失败: {exc}", code=500, status=500)
+    return _ok(result, message="SQL 已重新生成")
+
+
+@csrf_exempt
+@require_POST
+def flink_sync_apply(request):
+    """完整流程: Doris 结构同步 -> savepoint 停止 -> 生成 SQL -> 提交。"""
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    job_name = (payload or {}).get("job")
+    if not job_name:
+        return _fail("缺少 job 参数", code=400, status=400)
+    try:
+        result = apply_job(job_name, doris_sync=bool((payload or {}).get("doris_sync", True)))
+    except Exception as exc:
+        return _fail(f"执行失败: {exc}", code=500, status=500)
+    return _ok(result, message="变更流程执行完成")
