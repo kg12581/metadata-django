@@ -1,0 +1,91 @@
+{% extends "common/base.html" %}
+{% block title %}Flink SQL 作业 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0 0 4px">Flink SQL 实时 CDC 作业</h2>
+  <div class="muted">PostgreSQL(Debezium) / MySQL(Canal) -> Kafka -> Flink SQL -> Doris; 与 etl/ 的 T+1 批量互补</div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h3 style="margin:0 0 4px">作业文件</h3>
+      <div class="muted">点击查看 SQL 内容; 提交/停止用 flink_sql/ 下的脚本</div>
+    </div>
+    <button class="btn ghost" onclick="loadFiles()">刷新</button>
+  </div>
+  <div id="fileList"></div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <h3 id="fileTitle" style="margin:0">SQL 内容</h3>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" onclick="copyContent()">复制</button>
+      <button class="btn ghost" onclick="showCommands()">提交/停止命令</button>
+    </div>
+  </div>
+  <pre id="fileContent" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:480px;font-size:12px;margin:12px 0 0">点击左侧文件查看内容。</pre>
+  <div class="muted" id="commandHint" style="display:none;margin-top:8px"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentFile = '';
+let currentContent = '';
+
+async function loadFiles() {
+  const resp = await fetch('/api/metadata/flink-sql/files/');
+  const data = await resp.json();
+  const list = document.getElementById('fileList');
+  list.innerHTML = '';
+  (data.data || []).forEach(f => {
+    const card = document.createElement('div');
+    card.style.cssText = 'border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:10px;cursor:pointer;display:flex;justify-content:space-between;gap:12px';
+    card.onclick = () => loadFile(f.name);
+    const left = document.createElement('div');
+    const title = document.createElement('div');
+    title.innerHTML = '<strong class="mono">' + f.name + '</strong>';
+    const meta = document.createElement('div');
+    meta.className = 'muted';
+    meta.textContent = f.size + ' 字节 · ' + f.mtime;
+    left.appendChild(title);
+    left.appendChild(meta);
+    card.appendChild(left);
+    list.appendChild(card);
+  });
+}
+
+async function loadFile(name) {
+  currentFile = name;
+  const resp = await fetch('/api/metadata/flink-sql/file/?name=' + encodeURIComponent(name));
+  const data = await resp.json();
+  if (data.code !== 0) {
+    document.getElementById('fileContent').textContent = data.message;
+    return;
+  }
+  currentContent = data.data.content;
+  document.getElementById('fileTitle').textContent = name;
+  document.getElementById('fileContent').textContent = currentContent;
+  document.getElementById('commandHint').style.display = 'none';
+}
+
+async function copyContent() {
+  if (!currentContent) return;
+  await navigator.clipboard.writeText(currentContent);
+  alert('已复制 ' + currentFile);
+}
+
+function showCommands() {
+  if (!currentFile) return;
+  document.getElementById('commandHint').style.display = 'block';
+  document.getElementById('commandHint').innerHTML =
+    '<strong>提交:</strong> <span class="mono">./flink_sql/submit_flink_sql.sh ' + currentFile + '</span><br>' +
+    '<strong>停止:</strong> <span class="mono">./flink_sql/stop_flink_sql.sh "&lt;pipeline.name&gt;"</span><br>' +
+    '<span>FLINK_HOME 默认 /opt/flink, 可用环境变量覆盖。</span>';
+}
+
+loadFiles();
+</script>
+{% endblock %}

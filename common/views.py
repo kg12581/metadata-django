@@ -1,0 +1,730 @@
+import json
+import subprocess
+import sys
+from datetime import datetime
+from io import BytesIO
+from pathlib import Path
+
+from django.http import HttpResponse, JsonResponse
+from django.db.models import Count
+from django.shortcuts import get_object_or_404, render
+from django.utils import timezone
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_GET, require_POST
+
+from .config import get_datax_config, get_database_config, get_doris_config
+from .models import MetadataDatabase, MetadataTable
+from .serializers import database_to_dict, table_to_dict
+from .services.datax_sync import sync_table_data
+from .services.schema_check import check_tables
+from .services.schema_sync import sync_table_schema
+from .services.sync import sync_metadata
+from .services.task_config import (
+    cron_state,
+    install_cron,
+    load_task,
+    remove_cron,
+    save_task,
+)
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+FLINK_SQL_DIR = PROJECT_ROOT / "flink_sql"
+
+
+def _ok(data=None, message="ok", code=0, status=200):
+    return JsonResponse({"code": code, "message": message, "data": data}, status=status)
+
+
+def _fail(message, code=500, status=500):
+    return JsonResponse({"code": code, "message": message, "data": None}, status=status)
+
+
+def _parse_json_body(request) -> tuple[dict | None, str | None]:
+    if not request.body:
+        return {}, None
+    try:
+        data = json.loads(request.body.decode("utf-8") or "{}")
+    except json.JSONDecodeError:
+        return None, "请求体不是合法的 JSON"
+    if not isinstance(data, dict):
+        return None, "请求体必须是 JSON 对象"
+    return data, None
+
+
+def _tables_from_payload(payload: dict) -> tuple[list[str] | None, str | None]:
+    if isinstance(payload.get("table"), str):
+        return [payload["table"]], None
+    tables = payload.get("tables")
+    if isinstance(tables, list) and tables and all(isinstance(t, str) and t for t in tables):
+        return tables, None
+    return None, "缺少 table 或 tables 参数"
+
+
+@require_GET
+def index(request):
+    return _ok(
+        {
+            "endpoints": [
+                "GET  /api/metadata/",
+                "GET  /api/metadata/databases/",
+                "GET  /api/metadata/databases/<id>/",
+                "GET  /api/metadata/tables/<id>/",
+                "GET  /api/metadata/databases/<id>/export/",
+                "POST /api/metadata/sync/",
+                "POST /api/metadata/datax/check/",
+                "POST /api/metadata/datax/sync/",
+                "POST /api/metadata/schema-sync/",
+                "GET  /api/metadata/schema-sync/task/",
+                "POST /api/metadata/schema-sync/task/save/",
+                "POST /api/metadata/schema-sync/run/",
+                "GET  /api/metadata/schema-sync/log/",
+                "GET  /api/metadata/etl/config/",
+                "POST /api/metadata/etl/config/save/",
+                "POST /api/metadata/etl/run/",
+                "GET  /api/metadata/etl/log/",
+                "GET  /api/metadata/flink-sql/files/",
+                "GET  /api/metadata/flink-sql/file/?name=xxx.sql",
+            ]
+        }
+    )
+
+
+@require_GET
+def database_list(request):
+    databases = MetadataDatabase.objects.prefetch_related("tables").all()
+    return _ok([database_to_dict(db) for db in databases])
+
+
+@require_GET
+def database_detail(request, pk):
+    database = get_object_or_404(
+        MetadataDatabase.objects.prefetch_related("tables__columns"), pk=pk
+    )
+    return _ok(database_to_dict(database, include_tables=True))
+
+
+@require_GET
+def table_detail(request, pk):
+    table = get_object_or_404(
+        MetadataTable.objects.select_related("database").prefetch_related(
+            "columns", "indexes", "constraints"
+        ),
+        pk=pk,
+    )
+    return _ok(table_to_dict(table, include_children=True))
+
+
+@csrf_exempt
+@require_POST
+def sync_database(request):
+    """POST /api/metadata/sync/ 触发同步, 请求体可覆盖连接配置。"""
+    overrides = {}
+    if request.body:
+        try:
+            overrides = json.loads(request.body.decode("utf-8") or "{}")
+        except json.JSONDecodeError:
+            return _fail("请求体不是合法的 JSON", code=400, status=400)
+        if not isinstance(overrides, dict):
+            return _fail("请求体必须是 JSON 对象", code=400, status=400)
+
+    try:
+        config = get_database_config(overrides)
+    except (ValueError, TypeError) as exc:
+        return _fail(str(exc), code=400, status=400)
+
+    try:
+        database, stats = sync_metadata(config)
+    except Exception as exc:  # 连接/查询失败
+        return _fail(f"同步失败: {exc}", code=500, status=500)
+
+    return _ok(
+        {
+            "database": database_to_dict(database),
+            "stats": stats,
+        },
+        message=f"同步完成, 共 {stats['tables']} 张表",
+    )
+
+
+@require_GET
+def dashboard(request):
+    """前端页面: 数据源总览。"""
+    databases = (
+        MetadataDatabase.objects.annotate(table_count=Count("tables"))
+        .order_by("-updated_at")
+    )
+    return render(request, "common/dashboard.html", {"databases": databases})
+
+
+@require_GET
+def database_detail_ui(request, pk):
+    """前端页面: 某个数据源下的表列表。"""
+    database = get_object_or_404(
+        MetadataDatabase.objects.annotate(table_count=Count("tables")),
+        pk=pk,
+    )
+    tables = (
+        database.tables.annotate(column_count=Count("columns"))
+        .order_by("schema_name", "name")
+    )
+    return render(
+        request,
+        "common/database_detail.html",
+        {"database": database, "tables": tables},
+    )
+
+
+@require_GET
+def table_detail_ui(request, pk):
+    """前端页面: 表详情(字段/索引/约束)。"""
+    table = get_object_or_404(
+        MetadataTable.objects.select_related("database").prefetch_related(
+            "columns", "indexes", "constraints"
+        ),
+        pk=pk,
+    )
+    return render(request, "common/table_detail.html", {"table": table})
+
+
+@require_GET
+def export_database_excel(request, pk):
+    """把某个数据源的全部元数据导出为 Excel (.xlsx)。"""
+    database = get_object_or_404(
+        MetadataDatabase.objects.prefetch_related(
+            "tables__columns", "tables__indexes", "tables__constraints"
+        ),
+        pk=pk,
+    )
+    try:
+        import openpyxl
+        from openpyxl.styles import Alignment, Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError as exc:
+        raise RuntimeError(
+            "缺少 openpyxl, 请先执行: pip install -r requirements.txt"
+        ) from exc
+
+    wb = openpyxl.Workbook()
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill("solid", fgColor="2563EB")
+    header_align = Alignment(horizontal="center", vertical="center")
+
+    def write_sheet(title: str, headers: list[str], rows: list[list], widths: list[int]) -> None:
+        ws = wb.create_sheet(title)
+        ws.append(headers)
+        for cell in ws[1]:
+            cell.font = header_font
+            cell.fill = header_fill
+            cell.alignment = header_align
+        for row in rows:
+            ws.append(row)
+        for index, width in enumerate(widths, start=1):
+            ws.column_dimensions[get_column_letter(index)].width = width
+        ws.freeze_panes = "A2"
+        ws.auto_filter.ref = ws.dimensions
+
+    tables = list(database.tables.order_by("schema_name", "name"))
+
+    table_rows = [
+        [t.schema_name, t.name, t.table_type, t.comment, t.columns.count()]
+        for t in tables
+    ]
+    write_sheet(
+        "表",
+        ["Schema", "表名", "类型", "注释", "字段数"],
+        table_rows,
+        [18, 30, 14, 40, 10],
+    )
+
+    column_rows = [
+        [
+            c.table.schema_name,
+            c.table.name,
+            c.ordinal_position,
+            c.name,
+            c.data_type,
+            c.column_type,
+            "是" if c.is_nullable else "否",
+            c.column_default or "",
+            c.comment,
+        ]
+        for t in tables
+        for c in t.columns.all()
+    ]
+    write_sheet(
+        "字段",
+        ["Schema", "表名", "序号", "字段名", "数据类型", "完整类型", "可空", "默认值", "注释"],
+        column_rows,
+        [18, 30, 8, 25, 18, 18, 8, 30, 40],
+    )
+
+    index_rows = [
+        [
+            i.table.schema_name,
+            i.table.name,
+            i.name,
+            "主键" if i.is_primary else ("唯一" if i.is_unique else "普通"),
+            ", ".join(i.column_names),
+            i.definition,
+        ]
+        for t in tables
+        for i in t.indexes.all()
+    ]
+    write_sheet(
+        "索引",
+        ["Schema", "表名", "索引名", "类型", "字段", "定义"],
+        index_rows,
+        [18, 30, 30, 10, 40, 60],
+    )
+
+    constraint_rows = [
+        [
+            c.table.schema_name,
+            c.table.name,
+            c.name,
+            c.constraint_type,
+            ", ".join(c.column_names),
+            c.referenced_table,
+            c.referenced_column,
+        ]
+        for t in tables
+        for c in t.constraints.all()
+    ]
+    write_sheet(
+        "约束",
+        ["Schema", "表名", "约束名", "类型", "字段", "引用表", "引用字段"],
+        constraint_rows,
+        [18, 30, 30, 16, 40, 30, 30],
+    )
+
+    del wb["Sheet"]  # 删除默认空 sheet
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+
+    filename = f"metadata_{database.database_name}_{timezone.now():%Y%m%d_%H%M%S}.xlsx"
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return response
+
+
+@csrf_exempt
+@require_POST
+def datax_check(request):
+    """校验 MySQL 与 Doris 表结构是否一致, 返回 data.consistent = true/false。"""
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+
+    mysql_config = get_database_config(payload)
+    if mysql_config["db_type"] != "mysql":
+        return _fail("结构校验仅支持 MySQL 作为源库", code=400, status=400)
+    tables, err = _tables_from_payload(payload)
+    if err:
+        return _fail(err, code=400, status=400)
+
+    doris_config = get_doris_config(payload)
+    result = check_tables(
+        mysql_config,
+        doris_config,
+        mysql_config["database"],
+        tables,
+        doris_database=payload.get("doris_database"),
+    )
+    message = "表结构一致" if result["consistent"] else "存在表结构差异"
+    return _ok(result, message=message)
+
+
+@csrf_exempt
+@require_POST
+def datax_sync(request):
+    """先校验 MySQL 与 Doris 表结构一致, 再执行 DataX 同步表数据。"""
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+
+    mysql_config = get_database_config(payload)
+    if mysql_config["db_type"] != "mysql":
+        return _fail("DataX 同步仅支持 MySQL 作为源库", code=400, status=400)
+    tables, err = _tables_from_payload(payload)
+    if err:
+        return _fail(err, code=400, status=400)
+
+    doris_config = get_doris_config(payload)
+    datax_config = get_datax_config(payload)
+    doris_database = payload.get("doris_database")
+    truncate = bool(payload.get("truncate", True))
+    channel = int(payload.get("channel", 3))
+    force = bool(payload.get("force", False))
+    preview = bool(payload.get("preview", False))
+    split_pk = payload.get("split_pk") or None
+
+    check = check_tables(
+        mysql_config,
+        doris_config,
+        mysql_config["database"],
+        tables,
+        doris_database=doris_database,
+    )
+    if not check["consistent"] and not force and not preview:
+        return JsonResponse(
+            {
+                "code": 409,
+                "message": "表结构不一致, 未执行 DataX 同步(如需强制执行请传 force=true)",
+                "data": check,
+            },
+            status=409,
+        )
+
+    results = []
+    for table in tables:
+        try:
+            result = sync_table_data(
+                mysql_config,
+                doris_config,
+                datax_config,
+                mysql_config["database"],
+                table,
+                doris_database=doris_database,
+                truncate=truncate,
+                channel=channel,
+                force=force,
+                split_pk=split_pk,
+                preview=preview,
+            )
+        except Exception as exc:
+            result = {
+                "table": table,
+                "checked": False,
+                "consistent": False,
+                "executed": False,
+                "success": False,
+                "reason": str(exc),
+            }
+        results.append(result)
+
+    executed = [r for r in results if r.get("executed")]
+    ok = all(r.get("success") for r in executed)
+    if preview:
+        message = f"preview 模式, 已生成 {len(results)} 个 DataX job"
+    elif ok:
+        message = f"DataX 同步完成, 共 {len(executed)} 张表"
+    else:
+        message = "DataX 同步存在失败, 详见 results"
+    return _ok({"check": check, "results": results}, message=message)
+
+
+@csrf_exempt
+@require_POST
+def schema_sync(request):
+    """根据 MySQL 元数据自动对齐 Doris 表结构(新增/删除/修改字段, 不存在自动建表)。
+
+    请求体: {database, table|tables, doris_database, preview=true(默认), drop_columns=true, auto_create=true}
+    """
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+
+    mysql_config = get_database_config(payload)
+    if mysql_config["db_type"] != "mysql":
+        return _fail("结构同步仅支持 MySQL 作为源库", code=400, status=400)
+    tables, err = _tables_from_payload(payload)
+    if err:
+        return _fail(err, code=400, status=400)
+
+    doris_config = get_doris_config(payload)
+    preview = bool(payload.get("preview", True))
+    drop_columns = bool(payload.get("drop_columns", True))
+    auto_create = bool(payload.get("auto_create", True))
+
+    results = []
+    for table in tables:
+        try:
+            result = sync_table_schema(
+                mysql_config,
+                doris_config,
+                mysql_config["database"],
+                table,
+                doris_database=payload.get("doris_database"),
+                preview=preview,
+                drop_columns=drop_columns,
+                auto_create=auto_create,
+            )
+        except Exception as exc:
+            result = {"table": table, "error": str(exc), "statements": [], "warnings": []}
+        results.append(result)
+
+    message = "结构变更预览完成" if preview else "结构变更执行完成"
+    return _ok(results, message=message)
+
+
+@require_GET
+def schema_sync_page(request):
+    """前端页面: 结构同步定时任务管理。"""
+    return render(request, "common/schema_sync.html", {})
+
+
+@require_GET
+def schema_sync_task_detail(request):
+    task = load_task()
+    return _ok({**task, "cron": cron_state(task)})
+
+
+@csrf_exempt
+@require_POST
+def schema_sync_task_save(request):
+    """保存结构同步定时任务配置, 并同步写入 crontab。"""
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+
+    task = load_task()
+    for key in ("database", "tables", "doris_database"):
+        if payload.get(key) not in (None, ""):
+            task[key] = str(payload[key]).strip()
+    if "apply" in payload:
+        task["apply"] = bool(payload["apply"])
+    if "enabled" in payload:
+        task["enabled"] = bool(payload["enabled"])
+    try:
+        minute = int(payload.get("cron_minute", task["cron_minute"]))
+        hour = int(payload.get("cron_hour", task["cron_hour"]))
+        if not (0 <= minute <= 59 and 0 <= hour <= 23):
+            raise ValueError("cron 时间不合法")
+        task["cron_minute"] = minute
+        task["cron_hour"] = hour
+    except (ValueError, TypeError):
+        return _fail("cron 时间不合法(minute 0-59, hour 0-23)", code=400, status=400)
+
+    if not task["database"] or not task["tables"]:
+        return _fail("database 和 tables 不能为空", code=400, status=400)
+
+    task = save_task(task)
+    try:
+        if task["enabled"]:
+            cron = install_cron(task)
+        else:
+            cron = remove_cron()
+    except RuntimeError as exc:
+        return _fail(str(exc), code=500, status=500)
+    return _ok(
+        {"task": task, "cron": {**cron, **cron_state(task)}},
+        message="任务配置已保存",
+    )
+
+
+@csrf_exempt
+@require_POST
+def schema_sync_run_now(request):
+    """按任务配置立即执行/预览结构同步。body: {preview: true/false}"""
+    payload, err = _parse_json_body(request)
+    preview = bool((payload or {}).get("preview", False))
+    task = load_task()
+    mysql_config = get_database_config({"db_type": "mysql", "database": task["database"]})
+    doris_config = get_doris_config({"doris_database": task["doris_database"]})
+    tables = [t.strip() for t in task["tables"].split(",") if t.strip()]
+
+    results = []
+    for table in tables:
+        try:
+            result = sync_table_schema(
+                mysql_config,
+                doris_config,
+                task["database"],
+                table,
+                doris_database=task["doris_database"],
+                preview=preview,
+                drop_columns=True,
+                auto_create=True,
+            )
+        except Exception as exc:
+            result = {"table": table, "error": str(exc)}
+        results.append(result)
+    return _ok(results, message="预览完成" if preview else "执行完成")
+
+
+@require_GET
+def schema_sync_log_view(request):
+    logs = sorted(
+        (PROJECT_ROOT / "logs").glob("schema_sync_*.log"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not logs:
+        return _ok({"file": None, "tail": "暂无日志"})
+    latest = logs[0]
+    tail = "\n".join(
+        latest.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]
+    )
+    return _ok({"file": latest.name, "tail": tail})
+
+
+@require_GET
+def datax_page(request):
+    """前端页面: DataX 同步管理。"""
+    return render(request, "common/datax.html", {})
+
+
+@require_GET
+def etl_page(request):
+    """前端页面: ETL 管理。"""
+    return render(request, "common/etl.html", {})
+
+
+def _read_etl_config() -> dict:
+    path = PROJECT_ROOT / "etl" / "config.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {"kafka_bootstrap_servers": "192.168.3.100:9092",
+            "kafka_group_id": "etl_doris_pg_debezium_t1",
+            "kafka_topics": ["cdcpg.public.orders"],
+            "doris_database": "test_db"}
+
+
+@require_GET
+def etl_config_view(request):
+    config = _read_etl_config()
+    return _ok(
+        {
+            "kafka_bootstrap_servers": config.get("kafka_bootstrap_servers", ""),
+            "kafka_group_id": config.get("kafka_group_id", ""),
+            "doris_database": config.get("doris_database", ""),
+            "kafka_topics": config.get("kafka_topics", []),
+        }
+    )
+
+
+@csrf_exempt
+@require_POST
+def etl_config_save(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    path = PROJECT_ROOT / "etl" / "config.json"
+    config = _read_etl_config()
+
+    if payload.get("kafka_bootstrap_servers"):
+        config["kafka_bootstrap_servers"] = str(payload["kafka_bootstrap_servers"]).strip()
+    if payload.get("kafka_group_id"):
+        config["kafka_group_id"] = str(payload["kafka_group_id"]).strip()
+    if payload.get("doris_database"):
+        config["doris_database"] = str(payload["doris_database"]).strip()
+    if payload.get("kafka_topics") is not None:
+        raw = payload["kafka_topics"]
+        if isinstance(raw, str):
+            topics = [t.strip() for t in raw.replace("\n", ",").split(",") if t.strip()]
+        elif isinstance(raw, list):
+            topics = [str(t).strip() for t in raw if str(t).strip()]
+        else:
+            return _fail("kafka_topics 格式不正确", code=400, status=400)
+        if not topics:
+            return _fail("kafka_topics 不能为空", code=400, status=400)
+        config["kafka_topics"] = topics
+
+    path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return _ok(
+        {
+            "kafka_bootstrap_servers": config["kafka_bootstrap_servers"],
+            "kafka_group_id": config["kafka_group_id"],
+            "doris_database": config["doris_database"],
+            "kafka_topics": config["kafka_topics"],
+        },
+        message="ETL 配置已保存",
+    )
+
+
+@csrf_exempt
+@require_POST
+def etl_run(request):
+    """后台启动 ETL(立即返回), 输出写入 logs/etl_<日期>.log。"""
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    date = str(payload.get("date") or "").strip()
+    if not date:
+        import datetime as _dt
+        date = (_dt.datetime.now() - _dt.timedelta(days=1)).strftime("%F")
+    dry_run = bool(payload.get("dry_run", False))
+
+    log_dir = PROJECT_ROOT / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_file = log_dir / f"etl_{date}.log"
+
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "etl" / "etl_kafka_doris.py"),
+        "--date",
+        date,
+    ]
+    if dry_run:
+        command.append("--dry-run")
+    with open(log_file, "ab") as fp:
+        process = subprocess.Popen(
+            command,
+            cwd=str(PROJECT_ROOT),
+            stdout=fp,
+            stderr=subprocess.STDOUT,
+        )
+    return _ok(
+        {"started": True, "pid": process.pid, "date": date, "dry_run": dry_run, "log_file": str(log_file)},
+        message=f"ETL 已启动 (pid={process.pid}), 日志: {log_file.name}",
+    )
+
+
+@require_GET
+def etl_log_view(request):
+    logs = sorted(
+        (PROJECT_ROOT / "logs").glob("etl_*.log"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    if not logs:
+        return _ok({"file": None, "tail": "暂无日志"})
+    latest = logs[0]
+    tail = "\n".join(
+        latest.read_text(encoding="utf-8", errors="replace").splitlines()[-100:]
+    )
+    return _ok({"file": latest.name, "tail": tail})
+
+
+@require_GET
+def flink_sql_page(request):
+    """前端页面: Flink SQL 作业管理。"""
+    return render(request, "common/flink_sql.html", {})
+
+
+@require_GET
+def flink_sql_files(request):
+    files = []
+    for path in sorted(FLINK_SQL_DIR.glob("*.sql")):
+        stat = path.stat()
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        files.append(
+            {
+                "name": path.name,
+                "size": stat.st_size,
+                "mtime": datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+                "preview": "\n".join(lines[:20]),
+            }
+        )
+    return _ok(files)
+
+
+@require_GET
+def flink_sql_file(request):
+    name = request.GET.get("name", "")
+    if not name or "/" in name or "\\" in name or not name.endswith(".sql"):
+        return _fail("文件名不合法", code=400, status=400)
+    path = FLINK_SQL_DIR / name
+    if not path.exists():
+        return _fail("文件不存在", code=404, status=404)
+    return _ok(
+        {"name": name, "content": path.read_text(encoding="utf-8", errors="replace")}
+    )

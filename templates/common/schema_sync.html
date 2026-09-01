@@ -1,0 +1,164 @@
+{% extends "common/base.html" %}
+{% block title %}结构同步任务管理 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h2 style="margin:0 0 4px">结构同步定时任务</h2>
+      <div class="muted">按 MySQL 元数据自动对齐 Doris 表结构(新增/删除/修改字段, 表不存在自动建表)</div>
+    </div>
+    <span class="badge pending" id="taskBadge">加载中...</span>
+  </div>
+</div>
+
+<div class="card">
+  <h3>任务配置</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;max-width:900px">
+    <div>
+      <label class="muted">MySQL 源库</label>
+      <input type="text" id="cfgDatabase" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">表名(逗号分隔)</label>
+      <input type="text" id="cfgTables" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">Doris 目标库</label>
+      <input type="text" id="cfgDorisDb" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">每天执行时间 (时 分)</label>
+      <div style="display:flex;gap:8px">
+        <input type="number" id="cfgHour" min="0" max="23" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+        <input type="number" id="cfgMinute" min="0" max="59" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+      </div>
+    </div>
+  </div>
+  <div style="display:flex;gap:24px;margin-top:16px;flex-wrap:wrap">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="cfgApply"> 定时执行 DDL(--apply)
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="cfgEnabled"> 启用定时任务
+    </label>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" onclick="saveTask()">保存配置</button>
+    <button class="btn ghost" onclick="runTask(false)">立即预览</button>
+    <button class="btn ghost" onclick="runTask(true)">立即执行</button>
+    <button class="btn ghost" onclick="loadLog()">查看最近日志</button>
+  </div>
+</div>
+
+<div class="card" id="taskStatusCard" style="display:none">
+  <h3>任务状态</h3>
+  <div class="muted" id="taskStatus"></div>
+</div>
+
+<div class="card">
+  <h3>执行结果 / 日志</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:420px;font-size:12px;margin:0">暂无数据, 点击上方按钮查看。</pre>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+async function apiGet(path) {
+  const resp = await fetch(path);
+  return resp.json();
+}
+
+async function apiPost(path, payload) {
+  const resp = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  return resp.json();
+}
+
+function showResult(text) {
+  document.getElementById('resultArea').textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+}
+
+function fillForm(data) {
+  document.getElementById('cfgDatabase').value = data.database || '';
+  document.getElementById('cfgTables').value = data.tables || '';
+  document.getElementById('cfgDorisDb').value = data.doris_database || '';
+  document.getElementById('cfgHour').value = data.cron_hour ?? 3;
+  document.getElementById('cfgMinute').value = data.cron_minute ?? 0;
+  document.getElementById('cfgApply').checked = !!data.apply;
+  document.getElementById('cfgEnabled').checked = !!data.enabled;
+  const cron = data.cron || {};
+  const badge = document.getElementById('taskBadge');
+  if (cron.enabled) {
+    badge.textContent = '已启用 · 下次 ' + (cron.next_run || '-');
+    badge.className = 'badge synced';
+  } else {
+    badge.textContent = '未启用';
+    badge.className = 'badge pending';
+  }
+  document.getElementById('taskStatusCard').style.display = 'block';
+  document.getElementById('taskStatus').innerHTML =
+    'crontab 中: ' + (cron.in_crontab ? '是' : '否') +
+    ' · 下次执行: ' + (cron.next_run || '-') +
+    '<br><span class="mono" style="font-size:12px">' + (cron.crontab_line || '-') + '</span>';
+}
+
+async function loadTask() {
+  const data = await apiGet('/api/metadata/schema-sync/task/');
+  if (data.data) fillForm(data.data);
+}
+
+async function saveTask() {
+  const btn = event.target;
+  btn.disabled = true;
+  const payload = {
+    database: document.getElementById('cfgDatabase').value.trim(),
+    tables: document.getElementById('cfgTables').value.trim(),
+    doris_database: document.getElementById('cfgDorisDb').value.trim(),
+    cron_hour: parseInt(document.getElementById('cfgHour').value || '3'),
+    cron_minute: parseInt(document.getElementById('cfgMinute').value || '0'),
+    apply: document.getElementById('cfgApply').checked,
+    enabled: document.getElementById('cfgEnabled').checked
+  };
+  try {
+    const data = await apiPost('/api/metadata/schema-sync/task/save/', payload);
+    if (data.code === 0) {
+      fillForm(data.data);
+      showResult(data);
+    } else {
+      showResult(data);
+    }
+  } catch (err) {
+    showResult('保存失败: ' + err);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function runTask(apply) {
+  if (apply && !confirm('确定按任务配置在 Doris 上执行结构变更吗？')) return;
+  showResult('处理中...');
+  try {
+    const data = await apiPost('/api/metadata/schema-sync/run/', { preview: !apply });
+    showResult(data);
+  } catch (err) {
+    showResult('执行失败: ' + err);
+  }
+}
+
+async function loadLog() {
+  showResult('加载日志中...');
+  try {
+    const data = await apiGet('/api/metadata/schema-sync/log/');
+    const tail = data.data ? data.data.tail : '暂无日志';
+    showResult('文件: ' + (data.data ? data.data.file : '-') + '\n\n' + tail);
+  } catch (err) {
+    showResult('日志加载失败: ' + err);
+  }
+}
+
+loadTask();
+</script>
+{% endblock %}

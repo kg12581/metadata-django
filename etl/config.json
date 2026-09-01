@@ -1,0 +1,25 @@
+{
+  "kafka_bootstrap_servers": "192.168.3.100:9092",
+  "kafka_group_id": "etl_doris_pg_debezium_t1",
+  "kafka_topics": [
+    "cdcpg.public.orders"
+  ],
+  "kafka_idle_timeout": 30,
+  "kafka_max_runtime": 7200,
+  "timezone": "Asia/Shanghai",
+  "doris_host": "192.168.3.100",
+  "doris_port": 9030,
+  "doris_user": "root",
+  "doris_password": "",
+  "doris_database": "test_db",
+  "batch_size": 500,
+  "topics": {
+    "cdcpg.public.orders": {
+      "doris_database": "test_db",
+      "doris_table": "orders",
+      "primary_keys": [
+        "id"
+      ]
+    }
+  }
+}

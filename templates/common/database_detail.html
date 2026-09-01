@@ -1,0 +1,109 @@
+{% extends "common/base.html" %}
+{% block title %}{{ database }} - 表列表{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <a class="muted" href="/">&larr; 返回数据源列表</a>
+    <a class="btn ghost" href="{% url 'common:database-export' database.id %}">导出 Excel</a>
+  </div>
+  <h2 style="margin:8px 0 4px">{{ database.name|default:database.database_name }}</h2>
+  <div class="muted">
+    {{ database.get_db_type_display }} · <span class="mono">{{ database.host }}:{{ database.port }}</span>
+    · 数据库 {{ database.database_name }}
+    {% if database.schema_name %} · Schema {{ database.schema_name }}{% endif %}
+    · 状态 <span class="badge {{ database.status }}">{{ database.get_status_display }}</span>
+    · 最近同步 {{ database.last_sync_at|date:"Y-m-d H:i:s"|default:"-" }}
+  </div>
+  {% if database.error_message %}
+  <div class="muted danger" style="margin-top:8px">{{ database.error_message }}</div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h3 style="margin:0 0 4px">批量结构同步到 Doris</h3>
+      <div class="muted">对当前库全部 {{ tables|length }} 张表按 MySQL 元数据对齐 Doris 表结构</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" id="schemaPreviewBtn" onclick="schemaSync(false)">预览全部</button>
+      <button class="btn" id="schemaApplyBtn" onclick="schemaSync(true)">执行全部</button>
+    </div>
+  </div>
+  <pre id="schemaSyncResult" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:360px;font-size:12px"></pre>
+</div>
+
+<div class="card">
+  <div class="toolbar">
+    <h3 style="margin:0">表列表 ({{ tables|length }})</h3>
+    <input type="search" id="searchInput" placeholder="搜索表名 / 类型 / 注释...">
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Schema</th>
+        <th>表名</th>
+        <th>类型</th>
+        <th>字段数</th>
+        <th>注释</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody id="tableBody">
+      {% for t in tables %}
+      <tr>
+        <td class="mono">{{ t.schema_name }}</td>
+        <td class="mono">{{ t.name }}</td>
+        <td>{{ t.table_type|default:"-" }}</td>
+        <td>{{ t.column_count }}</td>
+        <td class="muted">{{ t.comment|default:"-" }}</td>
+        <td><a href="{% url 'ui:table-detail' t.id %}">详情</a></td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="6" class="muted">暂无数据</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SCHEMA_DB = "{{ database.database_name|escapejs }}";
+const SCHEMA_TABLES = [{% for t in tables %}"{{ t.name|escapejs }}"{% if not forloop.last %},{% endif %}{% endfor %}];
+
+async function schemaSync(apply) {
+  if (apply && !confirm('确定对 ' + SCHEMA_TABLES.length + ' 张表在 Doris 上执行结构变更吗？')) return;
+  const btn = document.getElementById(apply ? 'schemaApplyBtn' : 'schemaPreviewBtn');
+  const pre = document.getElementById('schemaSyncResult');
+  btn.disabled = true;
+  pre.style.display = 'block';
+  pre.textContent = '处理中...';
+  try {
+    const resp = await fetch('/api/metadata/schema-sync/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        database: SCHEMA_DB,
+        tables: SCHEMA_TABLES,
+        doris_database: '',
+        preview: !apply
+      })
+    });
+    const data = await resp.json();
+    pre.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    pre.textContent = '调用失败: ' + err;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+document.getElementById('searchInput').addEventListener('input', function () {
+  const q = this.value.toLowerCase();
+  document.querySelectorAll('#tableBody tr').forEach(tr => {
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+});
+</script>
+{% endblock %}

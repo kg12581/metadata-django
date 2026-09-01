@@ -1,0 +1,149 @@
+{% extends "common/base.html" %}
+{% block title %}{{ table.schema_name }}.{{ table.name }} - 表详情{% endblock %}
+{% block content %}
+<div class="card">
+  <a class="muted" href="{% url 'ui:database-detail' table.database_id %}">&larr; 返回表列表</a>
+  <h2 style="margin:8px 0 4px" class="mono">{{ table.schema_name }}.{{ table.name }}</h2>
+  <div class="muted">
+    {{ table.table_type|default:"表" }}
+    · 所属数据库 {{ table.database.host }}:{{ table.database.port }}/{{ table.database.database_name }}
+    · 注释: {{ table.comment|default:"-" }}
+  </div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h3 style="margin:0 0 4px">结构同步到 Doris</h3>
+      <div class="muted">按 MySQL 元数据自动新增/删除/修改字段; Doris 表不存在时自动建表(Unique Key)</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" id="schemaPreviewBtn" onclick="schemaSync(false)">预览结构变更</button>
+      <button class="btn" id="schemaApplyBtn" onclick="schemaSync(true)">执行结构变更</button>
+    </div>
+  </div>
+  <pre id="schemaSyncResult" style="display:none;background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:360px;font-size:12px"></pre>
+</div>
+
+<div class="card">
+  <h3>字段 ({{ table.columns.all|length }})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>字段名</th>
+        <th>数据类型</th>
+        <th>完整类型</th>
+        <th>可空</th>
+        <th>默认值</th>
+        <th>注释</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for col in table.columns.all %}
+      <tr>
+        <td>{{ col.ordinal_position }}</td>
+        <td class="mono">{{ col.name }}</td>
+        <td>{{ col.data_type }}</td>
+        <td class="mono">{{ col.column_type|default:"-" }}</td>
+        <td>{% if col.is_nullable %}是{% else %}<strong>否</strong>{% endif %}</td>
+        <td class="mono">{{ col.column_default|default:"-"|truncatechars:40 }}</td>
+        <td class="muted">{{ col.comment|default:"-" }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="7" class="muted">暂无字段</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>索引 ({{ table.indexes.all|length }})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>索引名</th>
+        <th>类型</th>
+        <th>字段</th>
+        <th>定义</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for idx in table.indexes.all %}
+      <tr>
+        <td class="mono">{{ idx.name }}</td>
+        <td>
+          {% if idx.is_primary %}主键{% elif idx.is_unique %}唯一{% else %}普通{% endif %}
+        </td>
+        <td class="mono">{{ idx.column_names|join:", " }}</td>
+        <td class="muted">{{ idx.definition|default:"-"|truncatechars:80 }}</td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="muted">暂无索引</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="card">
+  <h3>约束 ({{ table.constraints.all|length }})</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>约束名</th>
+        <th>类型</th>
+        <th>字段</th>
+        <th>引用表.字段</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for cons in table.constraints.all %}
+      <tr>
+        <td class="mono">{{ cons.name }}</td>
+        <td>{{ cons.constraint_type }}</td>
+        <td class="mono">{{ cons.column_names|join:", " }}</td>
+        <td class="mono">
+          {% if cons.referenced_table %}{{ cons.referenced_table }}.{{ cons.referenced_column }}{% else %}-{% endif %}
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="4" class="muted">暂无约束</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const SCHEMA_DB = "{{ table.database.database_name|escapejs }}";
+const SCHEMA_TABLE = "{{ table.name|escapejs }}";
+
+async function schemaSync(apply) {
+  if (apply && !confirm('确定按 MySQL 元数据在 Doris 上执行结构变更吗？')) return;
+  const btn = document.getElementById(apply ? 'schemaApplyBtn' : 'schemaPreviewBtn');
+  const pre = document.getElementById('schemaSyncResult');
+  btn.disabled = true;
+  pre.style.display = 'block';
+  pre.textContent = '处理中...';
+  try {
+    const resp = await fetch('/api/metadata/schema-sync/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        database: SCHEMA_DB,
+        table: SCHEMA_TABLE,
+        doris_database: '',
+        preview: !apply
+      })
+    });
+    const data = await resp.json();
+    pre.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    pre.textContent = '调用失败: ' + err;
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+{% endblock %}

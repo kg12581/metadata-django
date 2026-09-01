@@ -1,0 +1,95 @@
+{% extends "common/base.html" %}
+{% block title %}DataX 同步 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0 0 4px">DataX 同步 (MySQL -> Doris)</h2>
+  <div class="muted">先校验表结构一致, 再执行 DataX 同步表数据; 校验不一致默认拒绝执行</div>
+</div>
+
+<div class="card">
+  <h3>同步配置</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:900px">
+    <div>
+      <label class="muted">MySQL 源库</label>
+      <input type="text" id="cfgDatabase" placeholder="如 ai_chatbot" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">表名</label>
+      <input type="text" id="cfgTable" placeholder="如 analytics_event" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">Doris 目标库</label>
+      <input type="text" id="cfgDorisDb" placeholder="如 test_db" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">并发通道数</label>
+      <input type="number" id="cfgChannel" value="3" min="1" max="32" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+  </div>
+  <div style="display:flex;gap:24px;margin-top:16px;flex-wrap:wrap">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="cfgTruncate" checked> 同步前 TRUNCATE 目标表
+    </label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="cfgForce"> 跳过结构校验直接同步 (force)
+    </label>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn ghost" onclick="dataxCheck()">结构校验</button>
+    <button class="btn ghost" onclick="dataxPreview()">生成 job 预览</button>
+    <button class="btn" onclick="dataxSync()">执行同步</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>结果</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:420px;font-size:12px;margin:0">暂无数据。</pre>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function payload() {
+  return {
+    database: document.getElementById('cfgDatabase').value.trim(),
+    table: document.getElementById('cfgTable').value.trim(),
+    doris_database: document.getElementById('cfgDorisDb').value.trim() || null,
+    channel: parseInt(document.getElementById('cfgChannel').value || '3'),
+    truncate: document.getElementById('cfgTruncate').checked,
+    force: document.getElementById('cfgForce').checked
+  };
+}
+
+function showResult(data) {
+  document.getElementById('resultArea').textContent = JSON.stringify(data, null, 2);
+}
+
+async function call(method, body) {
+  const resp = await fetch('/api/metadata/datax/' + method + '/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  return resp.json();
+}
+
+async function dataxCheck() {
+  showResult({ message: '校验中...' });
+  const data = await call('check', payload());
+  showResult(data);
+}
+
+async function dataxPreview() {
+  showResult({ message: '生成 job 中...' });
+  const data = await call('sync', { ...payload(), preview: true });
+  showResult(data);
+}
+
+async function dataxSync() {
+  if (!confirm('确认执行 DataX 同步？(校验不一致会被拦截)')) return;
+  showResult({ message: '同步中, 请稍候...' });
+  const data = await call('sync', { ...payload(), preview: false });
+  showResult(data);
+}
+</script>
+{% endblock %}

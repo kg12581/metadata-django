@@ -1,0 +1,11 @@
+.env
+datax/jobs/
+logs/
+.idea/
+__pycache__/
+*.pyc
+db.sqlite3
+.venv/
+venv/
+.DS_Store
+*.log

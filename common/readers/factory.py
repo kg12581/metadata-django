@@ -1,0 +1,18 @@
+from .base import MetadataReader
+from .mysql import MySQLReader
+from .postgresql import PostgreSQLReader
+
+READERS: dict[str, type[MetadataReader]] = {
+    PostgreSQLReader.DB_TYPE: PostgreSQLReader,
+    MySQLReader.DB_TYPE: MySQLReader,
+}
+
+
+def get_reader(db_type: str, **kwargs) -> MetadataReader:
+    """按数据库类型创建元数据读取器。"""
+    reader_cls = READERS.get((db_type or "").lower())
+    if reader_cls is None:
+        raise ValueError(
+            f"不支持的数据库类型: {db_type!r}, 可用: {', '.join(READERS)}"
+        )
+    return reader_cls(**kwargs)

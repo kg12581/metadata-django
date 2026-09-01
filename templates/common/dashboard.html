@@ -1,0 +1,134 @@
+{% extends "common/base.html" %}
+{% block title %}数据源总览 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 style="margin:0 0 4px">数据源</h2>
+      <div class="muted">共 {{ databases|length }} 个数据源, 元数据来自远端 information_schema</div>
+    </div>
+    <button class="btn" id="syncBtn" onclick="triggerSync()">立即同步</button>
+  </div>
+  <div class="toolbar" style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:0">
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+      <input type="checkbox" id="autoSyncCheck"> 定时自动同步
+    </label>
+    <div style="display:flex;align-items:center;gap:10px;font-size:14px">
+      <select id="autoSyncInterval" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+        <option value="5">每 5 分钟</option>
+        <option value="10" selected>每 10 分钟</option>
+        <option value="30">每 30 分钟</option>
+        <option value="60">每 60 分钟</option>
+      </select>
+      <span class="muted" id="autoSyncStatus"></span>
+    </div>
+  </div>
+</div>
+
+{% if databases %}
+<div class="grid">
+  {% for db in databases %}
+  <div class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <strong>{{ db.name|default:db.database_name }}</strong>
+      <span class="badge {{ db.status }}">{{ db.get_status_display }}</span>
+    </div>
+    <div class="muted" style="margin:8px 0">
+      {{ db.get_db_type_display }} · {{ db.host }}:{{ db.port }} / {{ db.database_name }}
+      {% if db.schema_name %} · Schema {{ db.schema_name }}{% endif %}
+    </div>
+    <div class="muted grow">
+      表数量: {{ db.table_count }}
+      · 最近同步: {{ db.last_sync_at|date:"Y-m-d H:i:s"|default:"-" }}
+      {% if db.error_message %}<br><span class="danger">{{ db.error_message|truncatechars:100 }}</span>{% endif %}
+    </div>
+    <div style="margin-top:12px">
+      <a class="btn ghost" href="{% url 'ui:database-detail' db.id %}">查看表</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="card">
+  <p>还没有同步过数据源。点击右上角「立即同步」拉取远端元数据。</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const AUTO_KEY = 'metadataAutoSyncEnabled';
+const INTERVAL_KEY = 'metadataAutoSyncInterval';
+const check = document.getElementById('autoSyncCheck');
+const select = document.getElementById('autoSyncInterval');
+const statusEl = document.getElementById('autoSyncStatus');
+let autoTimer = null;
+
+function loadPrefs() {
+  check.checked = localStorage.getItem(AUTO_KEY) === '1';
+  select.value = localStorage.getItem(INTERVAL_KEY) || '10';
+}
+
+function savePrefs() {
+  localStorage.setItem(AUTO_KEY, check.checked ? '1' : '0');
+  localStorage.setItem(INTERVAL_KEY, select.value);
+}
+
+function updateStatus() {
+  if (check.checked) {
+    const next = new Date(Date.now() + Number(select.value) * 60 * 1000);
+    statusEl.textContent = `已开启, 每 ${select.value} 分钟 · 下次 ${next.toTimeString().slice(0, 8)}`;
+  } else {
+    statusEl.textContent = '已关闭';
+  }
+}
+
+function scheduleAutoSync() {
+  clearInterval(autoTimer);
+  if (check.checked) {
+    autoTimer = setInterval(runAutoSync, Number(select.value) * 60 * 1000);
+  }
+  updateStatus();
+}
+
+async function runAutoSync() {
+  try {
+    await fetch('/api/metadata/sync/', { method: 'POST' });
+    location.reload();
+  } catch (err) {
+    statusEl.textContent = '自动同步失败: ' + err;
+  }
+}
+
+async function triggerSync() {
+  const btn = document.getElementById('syncBtn');
+  btn.disabled = true;
+  btn.textContent = '同步中...';
+  try {
+    const resp = await fetch('/api/metadata/sync/', { method: 'POST' });
+    const data = await resp.json();
+    alert(data.message || '同步失败');
+    location.reload();
+  } catch (err) {
+    alert('同步失败: ' + err);
+    btn.disabled = false;
+    btn.textContent = '立即同步';
+  }
+}
+
+check.addEventListener('change', () => {
+  savePrefs();
+  if (check.checked) {
+    runAutoSync();  // 开启后立即同步一次
+  }
+  scheduleAutoSync();
+});
+select.addEventListener('change', () => {
+  savePrefs();
+  scheduleAutoSync();
+});
+
+loadPrefs();
+scheduleAutoSync();
+</script>
+{% endblock %}

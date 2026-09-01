@@ -1,0 +1,112 @@
+{% extends "common/base.html" %}
+{% block title %}ETL 管理 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0 0 4px">ETL 管理 (Kafka Debezium -> Doris)</h2>
+  <div class="muted">每日消费 PG Debezium 变更事件, 按日期过滤后增量写入 Doris; 配置保存在 etl/config.json</div>
+</div>
+
+<div class="card">
+  <h3>连接与 Topic 配置</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;max-width:900px">
+    <div>
+      <label class="muted">Kafka 地址</label>
+      <input type="text" id="cfgBootstrap" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">消费组</label>
+      <input type="text" id="cfgGroup" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">Doris 目标库</label>
+      <input type="text" id="cfgDorisDb" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+  </div>
+  <div style="margin-top:16px">
+    <label class="muted">Kafka Topics(每行一个)</label>
+    <textarea id="cfgTopics" rows="5" style="width:100%;max-width:900px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;font-family:ui-monospace,Menlo,Consolas,monospace"></textarea>
+  </div>
+  <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" onclick="saveEtlConfig()">保存配置</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>运行与日志</h3>
+  <div style="display:flex;gap:16px;align-items:end;flex-wrap:wrap;max-width:900px">
+    <div>
+      <label class="muted">处理日期 (T-1 默认昨天)</label>
+      <input type="date" id="runDate" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;padding-bottom:8px">
+      <input type="checkbox" id="runDryRun"> Dry-run(只统计不写 Doris)
+    </label>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="runEtl()">运行 ETL</button>
+      <button class="btn ghost" onclick="loadEtlLog()">查看最近日志</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>结果 / 日志</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:420px;font-size:12px;margin:0">暂无数据。</pre>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function showResult(text) {
+  document.getElementById('resultArea').textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+}
+
+async function loadEtlConfig() {
+  const resp = await fetch('/api/metadata/etl/config/');
+  const data = await resp.json();
+  const cfg = data.data || {};
+  document.getElementById('cfgBootstrap').value = cfg.kafka_bootstrap_servers || '';
+  document.getElementById('cfgGroup').value = cfg.kafka_group_id || '';
+  document.getElementById('cfgDorisDb').value = cfg.doris_database || '';
+  document.getElementById('cfgTopics').value = (cfg.kafka_topics || []).join('\n');
+}
+
+async function saveEtlConfig() {
+  const payload = {
+    kafka_bootstrap_servers: document.getElementById('cfgBootstrap').value.trim(),
+    kafka_group_id: document.getElementById('cfgGroup').value.trim(),
+    doris_database: document.getElementById('cfgDorisDb').value.trim(),
+    kafka_topics: document.getElementById('cfgTopics').value
+  };
+  const resp = await fetch('/api/metadata/etl/config/save/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  showResult(await resp.json());
+}
+
+async function runEtl() {
+  const date = document.getElementById('runDate').value;
+  const dryRun = document.getElementById('runDryRun').checked;
+  showResult({ message: 'ETL 正在后台启动...' });
+  const resp = await fetch('/api/metadata/etl/run/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ date: date || null, dry_run: dryRun })
+  });
+  const data = await resp.json();
+  showResult(data);
+  if (data.data && data.data.started) {
+    setTimeout(loadEtlLog, 5000);
+  }
+}
+
+async function loadEtlLog() {
+  const resp = await fetch('/api/metadata/etl/log/');
+  const data = await resp.json();
+  showResult('文件: ' + (data.data ? data.data.file : '-') + '\n\n' + (data.data ? data.data.tail : '暂无日志'));
+}
+
+loadEtlConfig();
+</script>
+{% endblock %}
