@@ -3,6 +3,8 @@ datax/jobs/
 flink_sql/jobs.json
 flink_sql/jobs_state.json
 flink_sql/generated/
+doris_sql/generated/
+hive_sql/generated/
 logs/
 .idea/
 __pycache__/

@@ -1,0 +1,154 @@
+{% extends "common/base.html" %}
+{% block title %}SQL 助手 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0 0 4px">SQL 助手</h2>
+  <div class="muted">基于已同步的元数据选库选表, 一键生成常用 SQL, 字段可点击插入编辑器</div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div style="display:flex;gap:12px;align-items:end;flex-wrap:wrap">
+      <div>
+        <label class="muted">数据源</label>
+        <select id="dbSelect" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;min-width:220px"></select>
+      </div>
+      <div>
+        <label class="muted">表</label>
+        <select id="tableSelect" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;min-width:240px"></select>
+      </div>
+    </div>
+    <div class="muted" id="tableMeta"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>字段(点击插入编辑器)</h3>
+  <div id="columnChips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn ghost" onclick="loadSnippet('select')">SELECT</button>
+      <button class="btn ghost" onclick="loadSnippet('select_all')">SELECT *</button>
+      <button class="btn ghost" onclick="loadSnippet('count')">COUNT</button>
+      <button class="btn ghost" onclick="loadSnippet('insert')">INSERT</button>
+      <button class="btn ghost" onclick="loadSnippet('update')">UPDATE</button>
+      <button class="btn ghost" onclick="loadSnippet('delete')">DELETE</button>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" onclick="formatSql()">格式化</button>
+      <button class="btn ghost" onclick="copySql()">复制</button>
+      <button class="btn ghost" onclick="clearSql()">清空</button>
+    </div>
+  </div>
+  <textarea id="sqlEditor" rows="16" spellcheck="false" placeholder="在这里写 SQL..."
+    style="width:100%;margin-top:12px;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;box-sizing:border-box"></textarea>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const editor = document.getElementById('sqlEditor');
+const dbSelect = document.getElementById('dbSelect');
+const tableSelect = document.getElementById('tableSelect');
+const KEYWORDS = ['SELECT','FROM','WHERE','INSERT','INTO','VALUES','UPDATE','SET','DELETE','CREATE','TABLE','ALTER','ADD','DROP','MODIFY','COLUMN','PRIMARY','KEY','UNIQUE','COUNT','AS','LIMIT','AND','OR','NOT','NULL','ORDER','BY','GROUP','JOIN','LEFT','RIGHT','INNER','ON','DISTINCT','INDEX','COMMENT','DEFAULT','IF','EXISTS','PARTITION','PARTITIONED','STORED','LOCATION','PROPERTIES','DISTRIBUTED','HASH','BUCKETS','UNIQUE KEY'];
+
+let currentSnippets = {};
+let currentQuoted = (name) => '`' + name + '`';
+
+async function loadOptions() {
+  const resp = await fetch('/api/metadata/sql-helper/options/');
+  const data = await resp.json();
+  dbSelect.innerHTML = '';
+  (data.data || []).forEach(db => {
+    const opt = document.createElement('option');
+    opt.value = db.id;
+    opt.textContent = '[' + db.db_type + '] ' + (db.name || db.host) + ' / ' + db.database_name;
+    dbSelect.appendChild(opt);
+  });
+  if (dbSelect.options.length) {
+    dbSelect.onchange = loadTables;
+    await loadTables();
+  } else {
+    tableSelect.innerHTML = '<option>请先同步元数据</option>';
+  }
+}
+
+async function loadTables() {
+  tableSelect.innerHTML = '<option value="">加载中...</option>';
+  const resp = await fetch('/api/metadata/sql-helper/tables/?db_id=' + dbSelect.value);
+  const data = await resp.json();
+  tableSelect.innerHTML = '';
+  (data.data || []).forEach(t => {
+    const opt = document.createElement('option');
+    opt.value = t.id;
+    opt.textContent = (t.schema_name ? t.schema_name + '.' : '') + t.name;
+    tableSelect.appendChild(opt);
+  });
+  if (tableSelect.options.length) {
+    tableSelect.onchange = loadTable;
+    await loadTable();
+  }
+}
+
+async function loadTable() {
+  if (!tableSelect.value) return;
+  const resp = await fetch('/api/metadata/sql-helper/table/' + tableSelect.value + '/');
+  const data = await resp.json();
+  const info = data.data;
+  currentSnippets = info.snippets || {};
+  currentQuoted = info.database.db_type === 'postgresql'
+    ? (name) => '"' + name + '"'
+    : (name) => '`' + name + '`';
+
+  document.getElementById('tableMeta').textContent =
+    info.database.database_name + '.' + (info.table.schema_name ? info.table.schema_name + '.' : '') + info.table.name +
+    (info.table.comment ? ' — ' + info.table.comment : '') +
+    ' · 字段 ' + info.columns.length + ' 个';
+
+  const chips = document.getElementById('columnChips');
+  chips.innerHTML = '';
+  info.columns.forEach(c => {
+    const chip = document.createElement('span');
+    chip.style.cssText = 'border:1px solid #cbd5e1;border-radius:999px;padding:4px 12px;font-size:12px;cursor:pointer;background:#f8fafc';
+    chip.title = (c.column_type || c.data_type) + (c.comment ? ' — ' + c.comment : '');
+    chip.innerHTML = '<strong class="mono">' + c.name + '</strong> <span class="muted">' + (c.column_type || c.data_type) + '</span>';
+    chip.onclick = () => insertAtCursor(currentQuoted(c.name));
+    chips.appendChild(chip);
+  });
+  editor.value = currentSnippets.select_all || '';
+}
+
+function insertAtCursor(text) {
+  const start = editor.selectionStart;
+  const end = editor.selectionEnd;
+  editor.value = editor.value.slice(0, start) + text + editor.value.slice(end);
+  editor.selectionStart = editor.selectionEnd = start + text.length;
+  editor.focus();
+}
+
+function loadSnippet(key) {
+  if (currentSnippets[key]) editor.value = currentSnippets[key];
+}
+
+function formatSql() {
+  let sql = editor.value;
+  const re = new RegExp('\\b(' + KEYWORDS.join('|').replace(/ /g, '|') + ')\\b', 'gi');
+  sql = sql.replace(re, m => m.toUpperCase());
+  editor.value = sql;
+}
+
+async function copySql() {
+  await navigator.clipboard.writeText(editor.value);
+  alert('已复制');
+}
+
+function clearSql() {
+  editor.value = '';
+}
+
+loadOptions();
+</script>
+{% endblock %}

@@ -33,4 +33,7 @@ urlpatterns = [
     path("sources/<int:pk>/delete/", views.source_delete, name="source-delete"),
     path("sources/<int:pk>/test/", views.source_test, name="source-test"),
     path("sources/<int:pk>/sync/", views.source_sync_metadata, name="source-sync"),
+    path("sql-helper/options/", views.sql_helper_options, name="sql-helper-options"),
+    path("sql-helper/tables/", views.sql_helper_tables, name="sql-helper-tables"),
+    path("sql-helper/table/<int:pk>/", views.sql_helper_table, name="sql-helper-table"),
 ]

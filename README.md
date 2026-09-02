@@ -3,6 +3,17 @@
 元数据采集平台(Django): 定时/手动把远端数据库(MySQL / PostgreSQL)的**表结构元数据**
 (库、表、字段、索引、约束、注释)同步到 Django 自己的表中, 并通过 REST API 对外提供查询。
 
+## 📚 文档导航
+
+| 文档 | 说明 |
+| --- | --- |
+| [docs/01-architecture.md](docs/01-architecture.md) | 架构图 / 模块地图 / 页面与定时任务清单 |
+| [docs/02-tech-stack-map.md](docs/02-tech-stack-map.md) | 大数据开发技术栈对照与扩展建议(Roadmap) |
+| [docs/03-official-docs-and-links.md](docs/03-official-docs-and-links.md) | 官方文档与学习资源链接大全 |
+
+> 面向大数据开发场景: 元数据采集 → 结构校验/自动 DDL → Flink 实时 + T+1 批量双链路增量,
+> DataX 离线同步, Doris/Hive SQL 资产沉淀。技术栈逐层对照见 docs/02。
+
 ## 功能
 
 - 支持读取 MySQL / PostgreSQL 的 information_schema 元数据
@@ -35,6 +46,7 @@ python manage.py runserver
 - `/etl/` — ETL 管理(Kafka Debezium -> Doris: 配置/后台运行/日志)
 - `/flink-sql/` — Flink SQL 实时 CDC 作业文件查看
 - `/sources/` — 元数据源配置(MySQL/PG/Oracle/Hive/Doris/SQL Server/Kafka, JDBC)
+- `/sql-helper/` — SQL 助手: 选库选表一键生成 SELECT/INSERT/UPDATE/DELETE/COUNT
 - `/databases/<id>/` — 某数据源下的表列表(支持按表名/注释搜索)
 - `/tables/<id>/` — 表详情: 字段/索引/约束
 
@@ -313,6 +325,8 @@ python manage.py createsuperuser
 ```text
 metadata_django/      Django 项目配置
 templates/common/     Web 界面模板
+doris_sql/            Doris 建表/变更模板 + MySQL->Doris DDL 生成脚本
+hive_sql/             Hive 外部表模板 + MySQL->Hive DDL 生成脚本
 common/
   models.py           元数据模型(库/表/字段/索引/约束)
   readers/            MySQL / PostgreSQL 元数据读取器

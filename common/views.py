@@ -19,6 +19,7 @@ from .services.datax_sync import sync_table_data
 from .services.flink_sync import apply_job, check_all_jobs, generate_job
 from .services.schema_check import check_tables
 from .services.schema_sync import sync_table_schema
+from .services.sql_helper import build_snippets
 from .services.sync import sync_metadata
 from .services.task_config import (
     cron_state,
@@ -975,4 +976,83 @@ def source_sync_metadata(request, pk):
     return _ok(
         {"database": database_to_dict(database), "stats": stats},
         message=f"同步完成: 表 {stats['tables']}, 字段 {stats['columns']}",
+    )
+
+
+# ---------------------------------------------------------------- SQL 助手
+
+@require_GET
+def sql_helper_page(request):
+    """前端页面: SQL 助手。"""
+    return render(request, "common/sql_helper.html", {})
+
+
+@require_GET
+def sql_helper_options(request):
+    databases = MetadataDatabase.objects.all()
+    return _ok(
+        [
+            {
+                "id": db.id,
+                "name": db.name or f"{db.db_type}://{db.host}",
+                "db_type": db.db_type,
+                "host": db.host,
+                "database_name": db.database_name,
+            }
+            for db in databases
+        ]
+    )
+
+
+@require_GET
+def sql_helper_tables(request):
+    db_id = request.GET.get("db_id")
+    tables = MetadataTable.objects.none()
+    if db_id:
+        tables = (
+            MetadataTable.objects.filter(database_id=db_id)
+            .order_by("schema_name", "name")
+        )
+    return _ok(
+        [
+            {"id": t.id, "schema_name": t.schema_name, "name": t.name, "comment": t.comment}
+            for t in tables
+        ]
+    )
+
+
+@require_GET
+def sql_helper_table(request, pk):
+    table = get_object_or_404(
+        MetadataTable.objects.select_related("database").prefetch_related("columns", "indexes"),
+        pk=pk,
+    )
+    columns = list(table.columns.all())
+    snippets = build_snippets(table, columns, table.database)
+    return _ok(
+        {
+            "table": {
+                "id": table.id,
+                "schema_name": table.schema_name,
+                "name": table.name,
+                "comment": table.comment,
+            },
+            "database": {
+                "id": table.database_id,
+                "db_type": table.database.db_type,
+                "database_name": table.database.database_name,
+            },
+            "columns": [
+                {
+                    "name": c.name,
+                    "data_type": c.data_type,
+                    "column_type": c.column_type,
+                    "is_nullable": c.is_nullable,
+                    "max_length": c.max_length,
+                    "comment": c.comment,
+                }
+                for c in columns
+            ],
+            "snippets": snippets,
+        }
     )
