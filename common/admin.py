@@ -1,12 +1,15 @@
 from django.contrib import admin
 
 from .models import (
+    LineageEdge,
     MetadataColumn,
     MetadataConstraint,
     MetadataDatabase,
     MetadataIndex,
     MetadataSourceConfig,
     MetadataTable,
+    ReconcileRun,
+    ReconcileTask,
 )
 
 
@@ -55,3 +58,22 @@ class MetadataSourceConfigAdmin(admin.ModelAdmin):
     list_display = ("name", "db_type", "host", "port", "database_name", "username", "enabled", "updated_at")
     list_filter = ("db_type", "enabled")
     search_fields = ("name", "host", "database_name", "jdbc_url")
+
+
+@admin.register(ReconcileTask)
+class ReconcileTaskAdmin(admin.ModelAdmin):
+    list_display = ("name", "task_type", "source_config", "source_db_name", "target_db_name", "enabled", "updated_at")
+    list_filter = ("task_type", "enabled")
+    search_fields = ("name", "source_db_name")
+
+
+@admin.register(ReconcileRun)
+class ReconcileRunAdmin(admin.ModelAdmin):
+    list_display = ("task", "status", "ran_at", "duration_ms")
+    list_filter = ("status",)
+
+
+@admin.register(LineageEdge)
+class LineageEdgeAdmin(admin.ModelAdmin):
+    list_display = ("source_table", "target_table", "sql_file", "created_at")
+    search_fields = ("source_table", "target_table")

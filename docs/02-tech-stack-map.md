@@ -50,7 +50,7 @@
 | 能力 | 主流技术 | 本项目现状 | 建议 |
 | --- | --- | --- | --- |
 | 元数据目录/资产 | DataHub / Atlas / 自研 | ✅ 本项目自研(库表字段索引约束 + Web) | 提供 OpenAPI 推送资产到 DataHub/Atlas(接口见 01 文档) |
-| 数据血缘 | Atlas Lineage / 自研 | ❌ | P1: 记录 ETL/DataX 血缘(source→target), 页面展示或推送 Atlas |
+| 数据血缘 | Atlas Lineage / 自研 | ✅ 自建: SQL 文件解析 INSERT/CTAS 血缘 + 页面; Atlas 推送待补 | 记录 ETL/DataX/Flink 血缘, 或推送 Atlas |
 | 数据源配置 | 集中管理 | ✅ `/sources/` JDBC 配置 + 测试 + 同步 | 补密钥加密存储(当前为明文本地库, 生产需加密) |
 | 数据字典/注释 | 平台展示 | ✅ 注释随元数据采集 | 打通业务元数据(负责人/口径)录入 |
 
@@ -58,7 +58,7 @@
 
 | 能力 | 主流技术 | 本项目现状 | 建议 |
 | --- | --- | --- | --- |
-| 完整性/一致性 | 结构校验 + 行数校验 | ✅ MySQL vs Doris 结构校验 | P1: 增加 T+1 行数/关键指标对账任务 |
+| 完整性/一致性 | 结构校验 + 行数校验 | ✅ 对账中心五种: 行数/主键快照/字段值/指标/元数据 | 接入 DolphinScheduler 每日调度 + 大盘 |
 | 质量规则 | Great Expectations / dbt test | ❌ | 建议 P2: 抽样规则 + 告警, 或接入 Apache Griffin |
 
 ## 8. 监控与运维
@@ -74,15 +74,16 @@
 ### P0(近期, 提升可靠性与闭环)
 
 1. 调度统一: 接入 DolphinScheduler, 元数据同步 → 结构同步 → T+1 数据同步串成工作流
-2. 对账任务: 每日 MySQL/PG 行数与 Doris/Hive 行数对账 + 告警
-   - ✅ 已提供 `manage.py reconcile_counts`(MySQL/PG 源, 可选钉钉类 webhook 告警)
+2. 对账任务: ✅ 五种对账已落地(行数/主键快照/字段值/指标/元数据, 页面 `/reconcile/`)
    - 待接: DolphinScheduler 每日调度 + Hive 侧对账 + 监控大盘
 3. Oracle/Hive 读取器: 支持 `sources` 页面配置后一键同步 Oracle、Hive(metastore)
 
 ### P1(中期, 治理与体验)
 
 4. 血缘记录: ETL/DataX/Flink 作业自动登记 source→target, 提供血缘 API/页面
-5. 元数据导出到 DataHub/Atlas, 或与离线数仓元数据打通
+5. 元数据导出到 DataHub/Atlas; ✅ SQL 血缘自建已完成(`/lineage/`), 待推送 Atlas
+   - ✅ 文档在线查看 `/docs/`; SQL 文件库 `/sql-files/`(本地/远程 Linux)
+   - ⏳ AI 分析接口就绪, 配置 `LLM_API_KEY` 即可用
 6. 数据源密码加密存储(非对称/密钥环), 连接信息审计
 
 ### P2(远期, 湖仓与智能)

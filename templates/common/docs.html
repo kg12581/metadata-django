@@ -1,0 +1,53 @@
+{% extends "common/base.html" %}
+{% block title %}文档 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card"><h2 style="margin:0">Web 文档</h2><div class="muted">项目内置 Markdown 文档, 支持在线查看</div></div>
+<div class="card" style="display:flex;gap:24px;flex-wrap:wrap">
+  <div style="min-width:240px" id="docList"></div>
+  <div style="flex:1;min-width:320px">
+    <div class="toolbar" style="margin-bottom:0">
+      <h3 id="docTitle" style="margin:0">选择左侧文档</h3>
+      <button class="btn ghost" onclick="toggleRaw()">原始 Markdown</button>
+    </div>
+    <div id="docBody" style="font-size:14px;line-height:1.7"></div>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let currentRaw=''; let showRaw=false;
+async function loadDocs(){
+  const resp=await fetch('/api/metadata/docs/');
+  const data=await resp.json();
+  const list=document.getElementById('docList');
+  list.innerHTML='';
+  (data.data||[]).forEach(d=>{
+    const a=document.createElement('a');
+    a.href='#'; a.textContent=d.name;
+    a.style.cssText='display:block;padding:6px 8px;border-radius:6px;color:#2563eb;text-decoration:none';
+    a.onclick=()=>{openDoc(d.name);return false;};
+    list.appendChild(a);
+  });
+  if((data.data||[]).length) openDoc(data.data[0].name);
+}
+async function openDoc(name){
+  const resp=await fetch('/api/metadata/docs/file/?name='+encodeURIComponent(name));
+  const data=await resp.json();
+  if(data.code!==0){document.getElementById('docBody').textContent=data.message;return;}
+  document.getElementById('docTitle').textContent=data.data.name;
+  currentRaw=data.data.raw;
+  showRaw=false;
+  document.getElementById('docBody').innerHTML=data.data.html;
+  // 基础样式: 表格边框
+  const style=document.createElement('style');
+  style.textContent='#docBody table{border-collapse:collapse}#docBody td,#docBody th{border:1px solid #cbd5e1;padding:6px 10px}#docBody pre{background:#f8fafc;padding:12px;border-radius:8px;overflow:auto}#docBody code{background:#f1f5f9;padding:2px 4px;border-radius:4px}';
+  document.getElementById('docBody').appendChild(style);
+}
+function toggleRaw(){
+  showRaw=!showRaw;
+  document.getElementById('docBody').textContent = showRaw? currentRaw : '';
+  if(!showRaw) openDoc(document.getElementById('docTitle').textContent);
+}
+loadDocs();
+</script>
+{% endblock %}

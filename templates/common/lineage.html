@@ -1,0 +1,53 @@
+{% extends "common/base.html" %}
+{% block title %}SQL 血缘 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div><h2 style="margin:0 0 4px">SQL 血缘</h2><div class="muted">从 INSERT...SELECT / CTAS 中提取 source -> target, 可到 SQL 文件库页面直接保存</div></div>
+    <button class="btn ghost" onclick="loadGraph()">刷新</button>
+    <button class="btn ghost" style="color:#b91c1c" onclick="clearGraph()">清空血缘</button>
+  </div>
+  <div id="graphArea"></div>
+</div>
+<div class="card">
+  <h3>快速解析</h3>
+  <textarea id="sqlBox" rows="8" spellcheck="false" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;font-size:12px;box-sizing:border-box"></textarea>
+  <div style="margin-top:8px;display:flex;gap:8px">
+    <button class="btn ghost" onclick="parseQuick(false)">解析</button>
+    <button class="btn" onclick="parseQuick(true)">解析并保存</button>
+  </div>
+  <pre id="resultBox" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:300px;font-size:12px;margin-top:10px"></pre>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+async function loadGraph(){
+  const resp=await fetch('/api/metadata/lineage/');
+  const data=await resp.json();
+  const g=data.data||{nodes:[],edges:[]};
+  const area=document.getElementById('graphArea');
+  area.innerHTML='<div class="muted">共 '+g.edges.length+' 条血缘, '+g.nodes.length+' 张表</div>';
+  const byTarget={};
+  g.edges.forEach(e=>{ (byTarget[e.target]=byTarget[e.target]||[]).push(e); });
+  Object.keys(byTarget).sort().forEach(target=>{
+    const card=document.createElement('div');
+    card.style.cssText='border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-top:8px';
+    card.innerHTML='<strong class="mono">'+target+'</strong><div class="muted" style="margin-top:4px">来源: '+byTarget[target].map(e=>'<span class="mono">'+e.source+'</span>'+(e.sql_file?' <span style="opacity:.6">('+e.sql_file+')</span>':'')).join(' → ')+'</div>';
+    area.appendChild(card);
+  });
+  if(!g.edges.length) area.innerHTML+='<div class="muted" style="margin-top:8px">暂无血缘, 请在 SQL 文件库页面「保存血缘」或下方快速解析。</div>';
+}
+async function parseQuick(save){
+  const resp=await fetch('/api/metadata/lineage/parse/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sql:document.getElementById('sqlBox').value,save:save})});
+  const data=await resp.json();
+  document.getElementById('resultBox').textContent=JSON.stringify(data,null,2);
+  if(save) loadGraph();
+}
+async function clearGraph(){
+  if(!confirm('确定清空全部血缘记录？'))return;
+  await fetch('/api/metadata/lineage/clear/',{method:'POST'});
+  loadGraph();
+}
+loadGraph();
+</script>
+{% endblock %}

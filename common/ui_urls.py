@@ -13,6 +13,10 @@ urlpatterns = [
     path("flink-sql/", views.flink_sql_page, name="flink-sql-page"),
     path("sources/", views.sources_page, name="sources-page"),
     path("sql-helper/", views.sql_helper_page, name="sql-helper-page"),
+    path("reconcile/", views.reconcile_page, name="reconcile-page"),
+    path("docs/", views.docs_page, name="docs-page"),
+    path("sql-files/", views.sql_files_page, name="sql-files-page"),
+    path("lineage/", views.lineage_page, name="lineage-page"),
     path("databases/<int:pk>/", views.database_detail_ui, name="database-detail"),
     path("tables/<int:pk>/", views.table_detail_ui, name="table-detail"),
 ]

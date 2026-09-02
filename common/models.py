@@ -23,6 +23,14 @@ class SourceType(models.TextChoices):
     OTHER = "other", "其他"
 
 
+class ReconcileType(models.TextChoices):
+    ROW_COUNT = "row_count", "行数对账"
+    PK_SNAPSHOT = "pk_snapshot", "主键快照对账"
+    FIELD_VALUE = "field_value", "字段值对账"
+    METRIC = "metric", "业务指标对账"
+    METADATA = "metadata", "元数据对账"
+
+
 class MetadataDatabase(models.Model):
     """一个被采集的远端数据库(数据源)。"""
 
@@ -93,6 +101,98 @@ class MetadataSourceConfig(models.Model):
 
     def __str__(self):
         return f"[{self.db_type}] {self.name}"
+
+
+class ReconcileTask(models.Model):
+    """对账任务: 源端 vs Doris 目标, 支持 5 种对账类型。"""
+
+    name = models.CharField("任务名", max_length=200, unique=True)
+    task_type = models.CharField(
+        "对账类型", max_length=30, choices=ReconcileType.choices
+    )
+    source_config = models.ForeignKey(
+        MetadataSourceConfig,
+        verbose_name="源配置",
+        related_name="reconcile_tasks",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+    )
+    source_db_name = models.CharField("源库名", max_length=200, blank=True, default="")
+    source_schema = models.CharField("源 Schema(PG)", max_length=200, blank=True, default="")
+    target_db_name = models.CharField("Doris 目标库", max_length=200, blank=True, default="")
+    tables = models.JSONField("对账表", default=list, blank=True)
+    columns = models.JSONField("字段值对账列", default=list, blank=True)
+    pk_columns = models.JSONField("主键快照主键列", default=list, blank=True)
+    metric_sql = models.TextField("指标 SQL({table} 占位)", blank=True, default="")
+    enabled = models.BooleanField("启用", default=True)
+    remark = models.TextField("备注", blank=True, default="")
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "对账任务"
+        verbose_name_plural = "对账任务"
+
+    def __str__(self):
+        return f"[{self.get_task_type_display()}] {self.name}"
+
+
+class ReconcileRun(models.Model):
+    """对账任务执行记录。"""
+
+    class RunStatus(models.TextChoices):
+        PENDING = "pending", "等待"
+        RUNNING = "running", "运行中"
+        SUCCESS = "success", "成功"
+        FAILED = "failed", "失败"
+
+    task = models.ForeignKey(
+        ReconcileTask,
+        verbose_name="任务",
+        related_name="runs",
+        on_delete=models.CASCADE,
+    )
+    status = models.CharField(
+        "状态", max_length=20, choices=RunStatus.choices, default=RunStatus.PENDING
+    )
+    summary = models.JSONField("汇总", default=dict, blank=True)
+    details = models.JSONField("明细", default=list, blank=True)
+    error = models.TextField("错误", blank=True, default="")
+    duration_ms = models.PositiveIntegerField("耗时 ms", default=0)
+    ran_at = models.DateTimeField("执行时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-ran_at"]
+        verbose_name = "对账执行"
+        verbose_name_plural = "对账执行"
+
+    def __str__(self):
+        return f"{self.task.name} @ {self.ran_at:%Y-%m-%d %H:%M:%S} [{self.status}]"
+
+
+class LineageEdge(models.Model):
+    """SQL 血缘边: source_table -> target_table。"""
+
+    source_table = models.CharField("源表", max_length=500)
+    target_table = models.CharField("目标表", max_length=500)
+    sql_file = models.CharField("来源 SQL 文件", max_length=500, blank=True, default="")
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["target_table", "source_table"]
+        verbose_name = "血缘关系"
+        verbose_name_plural = "血缘关系"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_table", "target_table", "sql_file"],
+                name="uniq_lineage_edge",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.source_table} -> {self.target_table}"
 
 
 class MetadataTable(models.Model):

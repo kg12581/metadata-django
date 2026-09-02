@@ -1,0 +1,149 @@
+{% extends "common/base.html" %}
+{% block title %}对账中心 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h2 style="margin:0 0 4px">数据对账中心</h2>
+      <div class="muted">行数 / 主键快照 / 字段值 / 业务指标 / 元数据 五种对账(源端 vs Doris)</div>
+    </div>
+    <button class="btn" onclick="openForm(null)">新建对账任务</button>
+  </div>
+</div>
+
+<div class="card" id="formCard" style="display:none">
+  <h3 id="formTitle">新建对账任务</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;max-width:1100px">
+    <div><label class="muted">任务名 *</label><input id="fName" style="w:100%;width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></div>
+    <div><label class="muted">类型 *</label>
+      <select id="fType" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px">
+        {% for value, label in task_types %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+      </select>
+    </div>
+    <div><label class="muted">源配置</label><select id="fSource" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></select></div>
+    <div><label class="muted">源库名</label><input id="fSourceDb" placeholder="ai_chatbot" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></div>
+    <div><label class="muted">Doris 目标库</label><input id="fTargetDb" placeholder="test_db" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></div>
+  </div>
+  <div style="margin-top:12px"><label class="muted">表名(每行一个)</label><textarea id="fTables" rows="3" style="width:100%;max-width:1100px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace"></textarea></div>
+  <div id="fExtra"></div>
+  <div style="margin-top:12px;display:flex;gap:8px">
+    <button class="btn" onclick="saveForm()">保存</button>
+    <button class="btn ghost" onclick="document.getElementById('formCard').style.display='none'">取消</button>
+  </div>
+</div>
+
+<div class="card"><div id="taskList"></div></div>
+<div class="card"><h3>执行结果</h3><pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:420px;font-size:12px;margin:0">暂无。</pre></div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const TYPE_EXTRA = {
+  pk_snapshot: {label: '主键列(逗号分隔)', key: 'pk'},
+  field_value: {label: '对账字段(逗号分隔, 空=全部自动), 格式: col 或 col:sum', key: 'cols'}
+};
+let editId = null;
+let sources = [];
+function showResult(t){document.getElementById('resultArea').textContent=typeof t==='string'?t:JSON.stringify(t,null,2);}
+
+async function loadSources(){
+  const resp = await fetch('/api/metadata/sources/');
+  const data = await resp.json();
+  sources = data.data || [];
+  const sel = document.getElementById('fSource');
+  sel.innerHTML = '<option value="">(不指定, 用 .env 连接)</option>';
+  sources.forEach(s => { const o=document.createElement('option'); o.value=s.id; o.textContent='['+s.db_type+'] '+s.name+' / '+s.database_name; sel.appendChild(o); });
+}
+
+function openForm(task){
+  editId = task ? task.id : null;
+  document.getElementById('formTitle').textContent = task ? '编辑: '+task.name : '新建对账任务';
+  document.getElementById('fName').value = task ? task.name : '';
+  document.getElementById('fType').value = task ? task.task_type : 'row_count';
+  document.getElementById('fSource').value = task ? (task.source_config_id || '') : '';
+  document.getElementById('fSourceDb').value = task ? (task.source_db_name||'') : '';
+  document.getElementById('fTargetDb').value = task ? (task.target_db_name||'test_db') : 'test_db';
+  document.getElementById('fTables').value = (task ? (task.tables||[]) : []).join('\n');
+  renderExtra(task);
+  document.getElementById('formCard').style.display='block';
+}
+
+function renderExtra(task){
+  const box = document.getElementById('fExtra');
+  const type = document.getElementById('fType').value;
+  box.innerHTML='';
+  if (type==='pk_snapshot'){
+    box.innerHTML='<label class="muted">主键列(逗号分隔)</label><input id="fPk" value="'+(task? (task.pk_columns||[]).join(',') : 'id')+'" style="width:100%;max-width:600px;padding:8px;border:1px solid #cbd5e1;border-radius:8px">';
+  } else if (type==='field_value'){
+    box.innerHTML='<label class="muted">对账字段(逗号分隔, 空=所有字段的 COUNT/DISTINCT/MIN/MAX)</label><input id="fCols" value="'+(task? (task.columns||[]).join(',') : '')+'" style="width:100%;max-width:900px;padding:8px;border:1px solid #cbd5e1;border-radius:8px">';
+  } else if (type==='metric'){
+    box.innerHTML='<label class="muted">指标 SQL(用 {table} 占位表名)</label><textarea id="fMetric" rows="2" style="width:100%;max-width:1100px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace">'+(task? (task.metric_sql||'SELECT COUNT(*) AS cnt, SUM(`amount`) AS total FROM `{table}`') : 'SELECT COUNT(*) AS cnt, SUM(`amount`) AS total FROM `{table}`')+'</textarea>';
+  }
+}
+document.getElementById('fType').addEventListener('change', ()=>renderExtra(null));
+
+async function saveForm(){
+  const type = document.getElementById('fType').value;
+  const payload = {
+    name: document.getElementById('fName').value.trim(),
+    task_type: type,
+    source_config_id: document.getElementById('fSource').value || null,
+    source_db_name: document.getElementById('fSourceDb').value.trim(),
+    target_db_name: document.getElementById('fTargetDb').value.trim(),
+    tables: document.getElementById('fTables').value.split('\n').map(s=>s.trim()).filter(Boolean)
+  };
+  if (type==='pk_snapshot') payload.pk_columns = (document.getElementById('fPk').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if (type==='field_value') payload.columns = (document.getElementById('fCols').value||'').split(',').map(s=>s.trim()).filter(Boolean);
+  if (type==='metric') payload.metric_sql = document.getElementById('fMetric').value;
+  const url = editId ? '/api/metadata/reconcile/tasks/'+editId+'/update/' : '/api/metadata/reconcile/tasks/create/';
+  const resp = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+  const data = await resp.json();
+  showResult(data);
+  if (data.code===0){ document.getElementById('formCard').style.display='none'; loadTasks(); }
+}
+
+async function loadTasks(){
+  const resp = await fetch('/api/metadata/reconcile/tasks/');
+  const data = await resp.json();
+  const list = document.getElementById('taskList');
+  list.innerHTML='';
+  const tasks = data.data||[];
+  if(!tasks.length){ list.textContent='暂无对账任务。'; return; }
+  const table=document.createElement('table');
+  table.innerHTML='<thead><tr><th>任务</th><th>类型</th><th>源库</th><th>表数</th><th>最近执行</th><th>操作</th></tr></thead>';
+  const tbody=document.createElement('tbody');
+  tasks.forEach(t=>{
+    const tr=document.createElement('tr');
+    const last=t.last_run? (t.last_run.status+' '+(t.last_run.summary? (t.last_run.summary.ok+'/'+t.last_run.summary.total):'')) : '-';
+    tr.innerHTML='<td><strong>'+t.name+'</strong></td><td>'+t.task_type_label+'</td><td>'+t.source_db_name+'</td><td>'+t.tables.length+'</td><td>'+last+'</td>'+
+      '<td style="white-space:nowrap"><a href="#" onclick="runTask('+t.id+');return false">执行</a> | <a href="#" onclick="editTask('+t.id+');return false">编辑</a> | <a href="#" style="color:#b91c1c" onclick="delTask('+t.id+');return false">删除</a></td>';
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); list.appendChild(table);
+}
+
+async function loadTaskDetail(id){
+  const resp = await fetch('/api/metadata/reconcile/tasks/'+id+'/');
+  const data = await resp.json();
+  return data.data;
+}
+async function editTask(id){
+  const detail = await loadTaskDetail(id);
+  openForm(detail.task);
+}
+async function runTask(id){
+  if(!confirm('确定执行该对账任务？')) return;
+  showResult({message:'执行中...'});
+  const resp = await fetch('/api/metadata/reconcile/tasks/'+id+'/run/', {method:'POST'});
+  showResult(await resp.json());
+  loadTasks();
+}
+async function delTask(id){
+  if(!confirm('确定删除？')) return;
+  const resp = await fetch('/api/metadata/reconcile/tasks/'+id+'/delete/', {method:'POST'});
+  showResult(await resp.json()); loadTasks();
+}
+
+loadSources(); loadTasks();
+</script>
+{% endblock %}

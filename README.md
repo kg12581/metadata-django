@@ -23,6 +23,9 @@
 - 页面定时自动同步(默认每 10 分钟, 可开关/调间隔)
 - 单个数据源元数据导出 Excel(.xlsx, 表/字段/索引/约束 四个工作表)
 - 行数对账: `manage.py reconcile_counts`(MySQL/PG vs Doris, 可选 webhook 告警)
+- 对账中心: 行数 / 主键快照 / 字段值 / 业务指标 / 元数据 五种对账(页面 + API)
+- SQL 文件库(本地目录或远程 Linux SFTP) + SQL 血缘解析 + 大模型分析
+- Markdown 文档在线查看(/docs/)
 
 ## 快速开始
 
@@ -48,6 +51,10 @@ python manage.py runserver
 - `/flink-sql/` — Flink SQL 实时 CDC 作业文件查看
 - `/sources/` — 元数据源配置(MySQL/PG/Oracle/Hive/Doris/SQL Server/Kafka, JDBC)
 - `/sql-helper/` — SQL 助手: 选库选表一键生成 SELECT/INSERT/UPDATE/DELETE/COUNT
+- `/reconcile/` — 数据对账中心(五种对账任务)
+- `/sql-files/` — SQL 文件库(可配置远程 Linux 目录)
+- `/lineage/` — SQL 血缘关系
+- `/docs/` — 在线文档
 - `/databases/<id>/` — 某数据源下的表列表(支持按表名/注释搜索)
 - `/tables/<id>/` — 表详情: 字段/索引/约束
 

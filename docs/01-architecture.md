@@ -59,6 +59,10 @@ flowchart LR
 | `hive_sql/` | Hive 外部表模板 + 从 MySQL 元数据生成 DDL | `hive_sql/generate_ddl.py` |
 | `templates/common` | Web 页面(总览/结构同步任务/DataX/ETL/Flink SQL/数据源配置/SQL 助手) | http://127.0.0.1:8000/ |
 | `docs/` | 架构 / 技术栈对照 / 官方链接(本文档) | - |
+| `common/services/reconcile_engine` | 对账引擎: 行数/主键快照/字段值/指标/元数据 | 页面 `/reconcile/`, `manage.py reconcile_task` |
+| `common/services/sql_files` | SQL 文件库(本地/远程 SFTP) | 页面 `/sql-files/` |
+| `common/services/lineage` | SQL 血缘解析与保存 | 页面 `/lineage/` |
+| `common/services/llm` | 大模型分析(OpenAI 兼容) | SQL 文件库页面「AI 分析」 |
 
 ## 页面入口(全部)
 
@@ -71,6 +75,7 @@ flowchart LR
 | Flink SQL(作业查看 + 自动同步) | `/flink-sql/` |
 | 数据源配置(JDBC) | `/sources/` |
 | SQL 助手 | `/sql-helper/` |
+| 对账中心 / SQL 文件库 / 血缘 / 文档 | `/reconcile/`, `/sql-files/`, `/lineage/`, `/docs/` |
 | 表列表 / 表详情 | `/databases/<id>/`, `/tables/<id>/` |
 | Django Admin | `/admin/` |
 

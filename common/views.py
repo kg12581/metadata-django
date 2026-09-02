@@ -13,10 +13,23 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .config import get_datax_config, get_database_config, get_doris_config
-from .models import MetadataDatabase, MetadataSourceConfig, MetadataTable, SourceType
+from .models import (
+    LineageEdge,
+    MetadataDatabase,
+    MetadataSourceConfig,
+    MetadataTable,
+    ReconcileRun,
+    ReconcileTask,
+    SourceType,
+)
 from .serializers import database_to_dict, source_config_to_dict, table_to_dict
 from .services.datax_sync import sync_table_data
 from .services.flink_sync import apply_job, check_all_jobs, generate_job
+from .services import docs as docs_service
+from .services import lineage as lineage_service
+from .services import llm as llm_service
+from .services import sql_files as sql_files_service
+from .services.reconcile_engine import run_task as run_reconcile_task
 from .services.schema_check import check_tables
 from .services.schema_sync import sync_table_schema
 from .services.sql_helper import build_snippets
@@ -1056,3 +1069,286 @@ def sql_helper_table(request, pk):
             "snippets": snippets,
         }
     )
+
+
+# ---------------------------------------------------------------- 对账中心
+
+@require_GET
+def reconcile_page(request):
+    return render(
+        request,
+        "common/reconcile.html",
+        {"task_types": ReconcileTask._meta.get_field("task_type").choices},
+    )
+
+
+def _reconcile_task_to_dict(task: ReconcileTask) -> dict:
+    return {
+        "id": task.id,
+        "name": task.name,
+        "task_type": task.task_type,
+        "task_type_label": task.get_task_type_display(),
+        "source_config_id": task.source_config_id,
+        "source_config_name": task.source_config.name if task.source_config else "",
+        "source_db_name": task.source_db_name,
+        "source_schema": task.source_schema,
+        "target_db_name": task.target_db_name,
+        "tables": task.tables,
+        "columns": task.columns,
+        "pk_columns": task.pk_columns,
+        "metric_sql": task.metric_sql,
+        "enabled": task.enabled,
+        "remark": task.remark,
+        "updated_at": task.updated_at.isoformat(),
+        "run_count": task.runs.count(),
+        "last_run": (
+            {
+                "id": task.runs.first().id,
+                "status": task.runs.first().status,
+                "summary": task.runs.first().summary,
+                "ran_at": task.runs.first().ran_at.isoformat(),
+            }
+            if task.runs.exists()
+            else None
+        ),
+    }
+
+
+@require_GET
+def reconcile_task_list(request):
+    tasks = ReconcileTask.objects.prefetch_related("runs").order_by("-updated_at")
+    return _ok([_reconcile_task_to_dict(t) for t in tasks])
+
+
+@csrf_exempt
+@require_POST
+def reconcile_task_create(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return _fail("name 不能为空", code=400, status=400)
+    task = ReconcileTask(name=name)
+    message = _apply_reconcile_payload(task, payload)
+    if message:
+        return _fail(message, code=400, status=400)
+    task.save()
+    return _ok(_reconcile_task_to_dict(task), message="任务已创建")
+
+
+@csrf_exempt
+@require_POST
+def reconcile_task_update(request, pk):
+    task = get_object_or_404(ReconcileTask, pk=pk)
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    if payload.get("name") not in (None, ""):
+        task.name = str(payload["name"]).strip()
+    message = _apply_reconcile_payload(task, payload)
+    if message:
+        return _fail(message, code=400, status=400)
+    task.save()
+    return _ok(_reconcile_task_to_dict(task), message="任务已更新")
+
+
+def _apply_reconcile_payload(task: ReconcileTask, payload: dict) -> str | None:
+    task_type = payload.get("task_type")
+    if task_type not in dict(ReconcileTask._meta.get_field("task_type").choices):
+        return "task_type 不合法"
+    task.task_type = task_type
+    if "source_config_id" in payload:
+        task.source_config_id = payload.get("source_config_id") or None
+    for key in ("source_db_name", "source_schema", "target_db_name", "metric_sql", "remark"):
+        if payload.get(key) is not None:
+            setattr(task, key, str(payload[key]).strip())
+    for key in ("tables", "columns", "pk_columns"):
+        if payload.get(key) is not None:
+            setattr(
+                task,
+                key,
+                [str(item).strip() for item in payload[key] if str(item).strip()],
+            )
+    if "enabled" in payload:
+        task.enabled = bool(payload["enabled"])
+    if not task.tables:
+        return "tables 不能为空"
+    if task.task_type == "pk_snapshot" and not task.pk_columns:
+        return "主键快照对账需要配置 pk_columns"
+    if task.task_type == "metric" and not task.metric_sql:
+        return "业务指标对账需要配置 metric_sql"
+    return None
+
+
+@require_GET
+def reconcile_task_detail(request, pk):
+    task = get_object_or_404(
+        ReconcileTask.objects.prefetch_related("runs"), pk=pk
+    )
+    runs = [
+        {
+            "id": r.id,
+            "status": r.status,
+            "summary": r.summary,
+            "error": r.error,
+            "duration_ms": r.duration_ms,
+            "ran_at": r.ran_at.isoformat(),
+            "details": r.details,
+        }
+        for r in task.runs.all()[:10]
+    ]
+    return _ok({"task": _reconcile_task_to_dict(task), "runs": runs})
+
+
+@csrf_exempt
+@require_POST
+def reconcile_task_delete(request, pk):
+    task = get_object_or_404(ReconcileTask, pk=pk)
+    task.delete()
+    return _ok({"id": pk}, message="任务已删除")
+
+
+@csrf_exempt
+@require_POST
+def reconcile_task_run(request, pk):
+    task = get_object_or_404(
+        ReconcileTask.objects.select_related("source_config"), pk=pk
+    )
+    if not task.source_config:
+        return _fail("任务未关联源配置", code=400, status=400)
+    run = run_reconcile_task(task)
+    return _ok(
+        {
+            "run_id": run.id,
+            "status": run.status,
+            "summary": run.summary,
+            "error": run.error,
+            "duration_ms": run.duration_ms,
+            "details": run.details,
+        },
+        message="对账完成" if run.status == "success" else "对账失败",
+    )
+
+
+# ---------------------------------------------------------------- 文档 Web
+
+@require_GET
+def docs_page(request):
+    return render(request, "common/docs.html", {})
+
+
+@require_GET
+def docs_list(request):
+    return _ok(docs_service.list_docs())
+
+
+@require_GET
+def docs_detail(request):
+    name = request.GET.get("name", "")
+    try:
+        return _ok(docs_service.get_doc(name))
+    except (ValueError, FileNotFoundError) as exc:
+        return _fail(str(exc), code=404, status=404)
+
+
+# ---------------------------------------------------------------- SQL 文件库
+
+@require_GET
+def sql_files_page(request):
+    return render(request, "common/sql_files.html", {})
+
+
+@require_GET
+def sql_files_list(request):
+    try:
+        entries = sql_files_service.backend().list_files(request.GET.get("path", ""))
+    except Exception as exc:
+        return _fail(f"读取失败: {exc}", code=500, status=500)
+    return _ok(
+        {
+            "backend": sql_files_service.backend().label,
+            "base_dir": str(sql_files_service.base_dir()),
+            "entries": entries,
+        }
+    )
+
+
+@require_GET
+def sql_files_read(request):
+    path = request.GET.get("path", "")
+    try:
+        content = sql_files_service.backend().read_file(path)
+    except Exception as exc:
+        return _fail(f"读取失败: {exc}", code=500, status=500)
+    return _ok({"path": path, "content": content})
+
+
+# ---------------------------------------------------------------- 血缘
+
+@require_GET
+def lineage_page(request):
+    return render(request, "common/lineage.html", {})
+
+
+@require_GET
+def lineage_graph(request):
+    return _ok(lineage_service.graph())
+
+
+@csrf_exempt
+@require_POST
+def lineage_parse(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    sql_text = payload.get("sql") or ""
+    sql_file = str(payload.get("sql_file") or "").strip()
+    parsed = lineage_service.parse_sql(sql_text)
+    saved = []
+    if payload.get("save") and parsed:
+        saved = lineage_service.save_lineage(sql_file, sql_text)
+    return _ok({"parsed": parsed, "saved": saved}, message="解析完成")
+
+
+@csrf_exempt
+@require_POST
+def lineage_clear(request):
+    deleted, _ = LineageEdge.objects.all().delete()
+    return _ok({"deleted": deleted}, message="血缘已清空")
+
+
+# ---------------------------------------------------------------- LLM 分析
+
+@csrf_exempt
+@require_POST
+def llm_analyze(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    kind = payload.get("kind", "sql")
+    metadata = ""
+    if payload.get("table_id"):
+        table = MetadataTable.objects.filter(pk=payload["table_id"]).select_related("database").first()
+        if table:
+            columns = [
+                f"{c.name} {c.column_type or c.data_type}"
+                + (f" 注释:{c.comment}" if c.comment else "")
+                for c in table.columns.all()
+            ]
+            metadata = (
+                f"表 {table.database.database_name}.{table.name} 注释:{table.comment}\n"
+                + "\n".join(columns)
+            )
+    elif payload.get("metadata"):
+        metadata = str(payload["metadata"])
+    try:
+        if kind == "sql":
+            text = llm_service.analyze_sql(str(payload.get("sql") or ""), metadata)
+        else:
+            text = llm_service.analyze_metadata(metadata or str(payload.get("sql") or ""))
+    except llm_service.LLMNotConfigured as exc:
+        return _fail(str(exc), code=400, status=400)
+    except Exception as exc:
+        return _fail(f"分析失败: {exc}", code=500, status=500)
+    return _ok({"analysis": text}, message="分析完成")

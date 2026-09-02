@@ -1,0 +1,82 @@
+{% extends "common/base.html" %}
+{% block title %}SQL 文件库 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h2 style="margin:0 0 4px">SQL 文件库</h2>
+      <div class="muted" id="backendInfo">加载中...</div>
+    </div>
+    <button class="btn ghost" onclick="loadFiles(currentPath)">刷新</button>
+  </div>
+  <div id="fileList"></div>
+</div>
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <h3 id="fileTitle" style="margin:0">文件内容</h3>
+    <div style="display:flex;gap:8px">
+      <button class="btn ghost" onclick="parseLineage(false)">解析血缘</button>
+      <button class="btn ghost" onclick="parseLineage(true)">保存血缘</button>
+      <button class="btn" onclick="llmAnalyze()">AI 分析</button>
+    </div>
+  </div>
+  <pre id="fileContent" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:420px;font-size:12px;margin-top:12px">点击左侧 SQL 文件查看。</pre>
+  <div id="analysisBox" class="muted" style="white-space:pre-wrap;margin-top:8px"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let currentPath=''; let currentFile=''; let currentContent='';
+function showContent(t){document.getElementById('fileContent').textContent=t;}
+async function loadFiles(path){
+  currentPath=path||'';
+  const resp=await fetch('/api/metadata/sql-files/files/?path='+encodeURIComponent(currentPath));
+  const data=await resp.json();
+  if(data.code!==0){showContent(data.message);return;}
+  document.getElementById('backendInfo').textContent='后端: '+data.data.backend+' | 根目录: '+data.data.base_dir+' | 路径: /'+currentPath;
+  const list=document.getElementById('fileList');
+  list.innerHTML='';
+  const crumbs=document.createElement('div');
+  crumbs.className='muted'; crumbs.style.cssText='margin-bottom:8px';
+  crumbs.innerHTML='<a href="#" onclick="loadFiles(\'\');return false">root</a>'+(currentPath? ' / '+currentPath.replace(/\//g,' / '):'');
+  list.appendChild(crumbs);
+  (data.data.entries||[]).forEach(e=>{
+    const row=document.createElement('div');
+    row.style.cssText='padding:6px 8px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:12px';
+    row.onmouseover=()=>row.style.background='#f1f5f9';
+    row.onmouseout=()=>row.style.background='';
+    const name=document.createElement('span');
+    name.textContent=(e.type==='dir'?'📁 ':'📄 ')+e.name;
+    row.appendChild(name);
+    const meta=document.createElement('span'); meta.className='muted'; meta.textContent=e.size? e.size+' B':'';
+    row.appendChild(meta);
+    row.onclick=()=>{ e.type==='dir'? loadFiles(e.path) : openFile(e.path); };
+    list.appendChild(row);
+  });
+}
+async function openFile(path){
+  currentFile=path;
+  document.getElementById('fileTitle').textContent=path;
+  const resp=await fetch('/api/metadata/sql-files/file/?path='+encodeURIComponent(path));
+  const data=await resp.json();
+  if(data.code!==0){showContent(data.message);return;}
+  currentContent=data.data.content;
+  showContent(currentContent);
+  document.getElementById('analysisBox').textContent='';
+}
+async function parseLineage(save){
+  if(!currentContent) return;
+  const resp=await fetch('/api/metadata/lineage/parse/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sql:currentContent,sql_file:currentFile,save:save})});
+  const data=await resp.json();
+  document.getElementById('analysisBox').textContent=JSON.stringify(data,null,2);
+}
+async function llmAnalyze(){
+  if(!currentContent) return;
+  document.getElementById('analysisBox').textContent='AI 分析中...';
+  const resp=await fetch('/api/metadata/llm/analyze/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({kind:'sql',sql:currentContent})});
+  const data=await resp.json();
+  document.getElementById('analysisBox').textContent=data.message+'\n\n'+(data.data?data.data.analysis:'');
+}
+loadFiles('');
+</script>
+{% endblock %}
