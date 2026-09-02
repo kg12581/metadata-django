@@ -86,3 +86,27 @@ def sql_assist(request_text: str, mode: str, metadata: str = "") -> str:
             f"可参考的表结构元数据:\n{metadata or '(未提供, 请自行假设合理表结构)'}"
         )
     return chat(prompt, system=system, max_tokens=2000)
+
+
+def spark_to_hive_sql(code: str, language: str, metadata: str = "") -> str:
+    """AI 把 Java/Scala/Python 写的 Spark 代码转换为 Hive SQL。
+
+    不写死解析规则: 完整代码交由 LLM 理解并生成等价 Hive SQL。
+    """
+    language = (language or "python").lower()
+    if language not in ("java", "scala", "python"):
+        language = "python"
+    system = (
+        "你是一名精通 Spark 与 Hive 的大数据工程师。用户会粘贴一段 Spark 代码"
+        "(Java/Scala/Python 的 DataFrame/RDD API 或 Spark SQL 均可)。"
+        "请把它转换为等价的 Hive SQL: "
+        "1) 先用 1-2 句中文说明这段代码在做什么; "
+        "2) 再给出可直接在 Hive 执行的 SQL(放 ```sql 代码块中); "
+        "3) 若代码含 Spark 特有能力(Hive 不支持), 用 SQL/子查询/临时表等价实现并注明; "
+        "4) 不要硬编码猜测表结构, 依据代码中的表/字段名生成。"
+    )
+    prompt = (
+        f"语言: {language}\n\nSpark 代码:\n```{language}\n{code}\n```\n\n"
+        f"可参考的表结构元数据:\n{metadata or '(未提供)'}"
+    )
+    return chat(prompt, system=system, max_tokens=2500)

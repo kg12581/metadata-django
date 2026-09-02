@@ -50,6 +50,7 @@ urlpatterns = [
     path("lineage/clear/", views.lineage_clear, name="lineage-clear"),
     path("llm/analyze/", views.llm_analyze, name="llm-analyze"),
     path("llm/sql-assist/", views.llm_sql_assist, name="llm-sql-assist"),
+    path("llm/spark-to-hive/", views.llm_spark_to_hive, name="llm-spark-to-hive"),
     path("ops/summary/", views.ops_summary, name="ops-summary"),
     path("scripts/", views.scripts_list, name="scripts-list"),
     path("scripts/file/", views.scripts_read, name="scripts-read"),

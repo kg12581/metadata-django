@@ -1,0 +1,121 @@
+{% extends "common/base.html" %}
+{% block title %}Spark 转 Hive SQL - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0 0 4px">Spark 代码 → Hive SQL</h2>
+  <div class="muted">粘贴 Java / Scala / Python 编写的 Spark 代码(DataFrame/RDD/Spark SQL), 由 AI 生成等价 Hive SQL(需配置 LLM_API_KEY, 默认 DeepSeek)</div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:8px;justify-content:flex-start;gap:12px">
+    <div>
+      <label class="muted">代码语言</label>
+      <select id="langSelect" onchange="updatePlaceholder()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-left:8px">
+        <option value="python">Python</option>
+        <option value="scala">Scala</option>
+        <option value="java">Java</option>
+      </select>
+    </div>
+    <div>
+      <label class="muted">数据源表(可选, 提供字段上下文)</label>
+      <select id="dbSelect" onchange="loadTables()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-left:8px">
+        <option value="">不关联</option>
+      </select>
+      <select id="tableSelect" onchange="loadTableMeta()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-left:4px">
+        <option value="">(选数据源)</option>
+      </select>
+    </div>
+  </div>
+  <textarea id="codeBox" rows="12" spellcheck="false" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;box-sizing:border-box"></textarea>
+  <div id="metaHint" class="muted" style="margin:8px 0"></div>
+  <div style="margin-top:10px;display:flex;gap:8px">
+    <button class="btn" onclick="convert()">AI 生成 Hive SQL</button>
+    <button class="btn ghost" onclick="copyResult()">复制结果</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>AI 输出</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:520px;font-size:13px;margin:0;white-space:pre-wrap">暂无输出。</pre>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const SAMPLES = {
+  python: `from pyspark.sql import SparkSession, functions as F\n\nspark = SparkSession.builder.appName("demo").enableHiveSupport().getOrCreate()\n\ndf = spark.sql("SELECT * FROM ods.orders")\ndaily = (\n    df.filter(F.col("dt") == "2026-09-01")\n      .groupBy("product")\n      .agg(\n          F.sum("quantity").alias("total_qty"),\n          F.sum("amount").alias("total_amount"),\n          F.count("*").alias("order_cnt")\n      )\n)\ndaily.write.mode("overwrite").saveAsTable("dws.daily_product_sales")`,
+  scala: `import org.apache.spark.sql.functions._\nimport org.apache.spark.sql.SparkSession\n\nval spark = SparkSession.builder().appName("demo").enableHiveSupport().getOrCreate()\nimport spark.implicits._\n\nval df = spark.sql("SELECT * FROM ods.orders")\nval daily = df\n  .filter($"dt" === "2026-09-01")\n  .groupBy("product")\n  .agg(\n    sum("quantity").as("total_qty"),\n    sum("amount").as("total_amount"),\n    count("*").as("order_cnt")\n  )\ndaily.write.mode("overwrite").saveAsTable("dws.daily_product_sales")`,
+  java: `import org.apache.spark.sql.Dataset;\nimport org.apache.spark.sql.Row;\nimport org.apache.spark.sql.SparkSession;\nimport static org.apache.spark.sql.functions.*;\n\nSparkSession spark = SparkSession.builder().appName("demo").enableHiveSupport().getOrCreate();\n\nDataset<Row> df = spark.sql("SELECT * FROM ods.orders");\nDataset<Row> daily = df\n    .filter(col("dt").equalTo("2026-09-01"))\n    .groupBy("product")\n    .agg(\n        sum("quantity").as("total_qty"),\n        sum("amount").as("total_amount"),\n        count("*").as("order_cnt")\n    );\ndaily.write().mode("overwrite").saveAsTable("dws.daily_product_sales");`
+};
+let currentTableId = '';
+
+function updatePlaceholder() {
+  const lang = document.getElementById('langSelect').value;
+  document.getElementById('codeBox').value = SAMPLES[lang] || '';
+  document.getElementById('resultArea').textContent = '暂无输出。';
+}
+
+async function loadOptions() {
+  const resp = await fetch('/api/metadata/sql-helper/options/');
+  const data = await resp.json();
+  const sel = document.getElementById('dbSelect');
+  (data.data || []).forEach(db => {
+    const o = document.createElement('option');
+    o.value = db.id;
+    o.textContent = '[' + db.db_type + '] ' + db.database_name;
+    sel.appendChild(o);
+  });
+}
+
+async function loadTables() {
+  const sel = document.getElementById('tableSelect');
+  sel.innerHTML = '<option value="">(选数据源)</option>';
+  const dbId = document.getElementById('dbSelect').value;
+  if (!dbId) return;
+  const resp = await fetch('/api/metadata/sql-helper/tables/?db_id=' + dbId);
+  const data = await resp.json();
+  (data.data || []).slice(0, 500).forEach(t => {
+    const o = document.createElement('option');
+    o.value = t.id;
+    o.textContent = t.name;
+    sel.appendChild(o);
+  });
+}
+
+async function loadTableMeta() {
+  currentTableId = document.getElementById('tableSelect').value;
+  const hint = document.getElementById('metaHint');
+  if (!currentTableId) { hint.textContent = ''; return; }
+  const resp = await fetch('/api/metadata/sql-helper/table/' + currentTableId + '/');
+  const data = await resp.json();
+  const info = data.data;
+  hint.textContent = '已关联元数据: ' + info.database.database_name + '.' + info.table.name +
+    ' (' + info.columns.length + ' 字段) — 作为上下文提供给 AI';
+}
+
+async function convert() {
+  const code = document.getElementById('codeBox').value.trim();
+  if (!code) { alert('请先粘贴 Spark 代码'); return; }
+  const area = document.getElementById('resultArea');
+  area.textContent = 'AI 转换中...';
+  const resp = await fetch('/api/metadata/llm/spark-to-hive/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      code: code,
+      language: document.getElementById('langSelect').value,
+      table_id: currentTableId || null
+    })
+  });
+  const data = await resp.json();
+  area.textContent = data.code === 0 ? data.data.result : data.message;
+}
+
+async function copyResult() {
+  const text = document.getElementById('resultArea').textContent;
+  if (text && text !== '暂无输出。') await navigator.clipboard.writeText(text);
+}
+
+loadOptions();
+updatePlaceholder();
+</script>
+{% endblock %}

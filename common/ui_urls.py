@@ -14,6 +14,7 @@ urlpatterns = [
     path("sources/", views.sources_page, name="sources-page"),
     path("sql-helper/", views.sql_helper_page, name="sql-helper-page"),
     path("ai-sql/", views.ai_sql_page, name="ai-sql-page"),
+    path("spark2sql/", views.spark_to_hive_page, name="spark-to-hive-page"),
     path("reconcile/", views.reconcile_page, name="reconcile-page"),
     path("docs/", views.docs_page, name="docs-page"),
     path("sql-files/", views.sql_files_page, name="sql-files-page"),
