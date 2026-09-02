@@ -242,6 +242,63 @@ class ScriptRun(models.Model):
         return f"{self.script_path} [{self.status}] @ {self.started_at:%H:%M:%S}"
 
 
+class SchedulerJob(models.Model):
+    """调度任务: 执行脚本管理中的 shell/python 或 ETL 脚本。"""
+
+    class JobType(models.TextChoices):
+        SCRIPT = "script", "脚本"
+        ETL = "etl", "ETL"
+
+    name = models.CharField("任务名", max_length=200, unique=True)
+    job_type = models.CharField(
+        "类型", max_length=20, choices=JobType.choices, default=JobType.SCRIPT
+    )
+    script_path = models.CharField("脚本路径", max_length=500, blank=True, default="")
+    args = models.JSONField("参数", default=list, blank=True)
+    cron_minute = models.PositiveIntegerField("分", default=0)
+    cron_hour = models.PositiveIntegerField("时", default=2)
+    timeout_seconds = models.PositiveIntegerField("超时秒", default=900)
+    enabled = models.BooleanField("启用", default=True)
+    remark = models.TextField("备注", blank=True, default="")
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        ordering = ["-updated_at"]
+        verbose_name = "调度任务"
+        verbose_name_plural = "调度任务"
+
+    def __str__(self):
+        return f"[{self.get_job_type_display()}] {self.name}"
+
+    def cron_fields(self) -> str:
+        return f"{self.cron_minute} {self.cron_hour} * * *"
+
+
+class SchedulerRun(models.Model):
+    """调度任务执行历史。"""
+
+    job = models.ForeignKey(
+        SchedulerJob,
+        verbose_name="任务",
+        related_name="runs",
+        on_delete=models.CASCADE,
+    )
+    status = models.CharField("状态", max_length=20, default="success")
+    exit_code = models.IntegerField("退出码", null=True, blank=True)
+    output = models.TextField("输出", blank=True, default="")
+    duration_ms = models.PositiveIntegerField("耗时 ms", default=0)
+    started_at = models.DateTimeField("开始时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        verbose_name = "调度执行"
+        verbose_name_plural = "调度执行"
+
+    def __str__(self):
+        return f"{self.job.name} [{self.status}] @ {self.started_at:%H:%M:%S}"
+
+
 class MetadataTable(models.Model):
     """远端库中的一张表或视图。"""
 

@@ -22,6 +22,8 @@ from .models import (
     MetadataTable,
     ReconcileRun,
     ReconcileTask,
+    SchedulerJob,
+    SchedulerRun,
     SourceType,
 )
 from .serializers import database_to_dict, source_config_to_dict, table_to_dict
@@ -33,6 +35,7 @@ from .services import llm as llm_service
 from .services import sql_files as sql_files_service
 from .services import scripts as scripts_service
 from .services.reconcile_engine import run_task as run_reconcile_task
+from .services import scheduler as scheduler_service
 from .services.schema_check import check_tables
 from .services.schema_sync import sync_table_schema
 from .services.sql_helper import build_snippets
@@ -1582,3 +1585,175 @@ def scripts_runs(request):
         )
     )
     return _ok(runs)
+
+
+# ---------------------------------------------------------------- 调度中心
+
+@require_GET
+def scheduler_page(request):
+    return render(request, "common/scheduler.html", {})
+
+
+def _scheduler_job_to_dict(job: SchedulerJob) -> dict:
+    last_run = job.runs.first()
+    return {
+        "id": job.id,
+        "name": job.name,
+        "job_type": job.job_type,
+        "job_type_label": job.get_job_type_display(),
+        "script_path": job.script_path,
+        "args": job.args,
+        "cron_minute": job.cron_minute,
+        "cron_hour": job.cron_hour,
+        "cron_fields": job.cron_fields(),
+        "timeout_seconds": job.timeout_seconds,
+        "enabled": job.enabled,
+        "remark": job.remark,
+        "updated_at": job.updated_at.isoformat(),
+        "last_run": (
+            {
+                "id": last_run.id,
+                "status": last_run.status,
+                "exit_code": last_run.exit_code,
+                "duration_ms": last_run.duration_ms,
+                "started_at": last_run.started_at.isoformat(),
+            }
+            if last_run
+            else None
+        ),
+    }
+
+
+@require_GET
+def scheduler_jobs(request):
+    jobs = SchedulerJob.objects.prefetch_related("runs").order_by("-updated_at")
+    return _ok([_scheduler_job_to_dict(j) for j in jobs])
+
+
+def _apply_scheduler_payload(job: SchedulerJob, payload: dict) -> str | None:
+    if payload.get("job_type") in SchedulerJob.JobType.values:
+        job.job_type = payload["job_type"]
+    if payload.get("script_path") is not None:
+        job.script_path = str(payload["script_path"]).strip()
+    if payload.get("args_text") is not None:
+        import shlex
+
+        try:
+            job.args = shlex.split(str(payload["args_text"]))
+        except ValueError:
+            return "args 格式不正确"
+    if payload.get("args") is not None:
+        job.args = [str(a) for a in payload["args"]]
+    for key in ("cron_minute", "cron_hour", "timeout_seconds"):
+        if payload.get(key) not in (None, ""):
+            try:
+                setattr(job, key, int(payload[key]))
+            except (TypeError, ValueError):
+                return f"{key} 必须是数字"
+    if not (0 <= job.cron_minute <= 59 and 0 <= job.cron_hour <= 23):
+        return "cron 时间不合法"
+    if "enabled" in payload:
+        job.enabled = bool(payload["enabled"])
+    if payload.get("remark") is not None:
+        job.remark = str(payload["remark"]).strip()
+    if job.job_type == "script":
+        available = {s["path"] for s in scripts_service.list_scripts()}
+        if job.script_path not in available:
+            return f"脚本不存在或不在受管目录: {job.script_path}"
+    return None
+
+
+@csrf_exempt
+@require_POST
+def scheduler_job_create(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return _fail("name 不能为空", code=400, status=400)
+    if SchedulerJob.objects.filter(name=name).exists():
+        return _fail(f"任务名已存在: {name}", code=400, status=400)
+    job = SchedulerJob(name=name)
+    message = _apply_scheduler_payload(job, payload)
+    if message:
+        return _fail(message, code=400, status=400)
+    job.save()
+    if job.enabled:
+        scheduler_service.refresh_crontab()
+    return _ok(_scheduler_job_to_dict(job), message="任务已创建")
+
+
+@csrf_exempt
+@require_POST
+def scheduler_job_update(request, pk):
+    job = get_object_or_404(SchedulerJob, pk=pk)
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    if payload.get("name") not in (None, ""):
+        new_name = str(payload["name"]).strip()
+        if SchedulerJob.objects.filter(name=new_name).exclude(pk=job.pk).exists():
+            return _fail(f"任务名已存在: {new_name}", code=400, status=400)
+        job.name = new_name
+    message = _apply_scheduler_payload(job, payload)
+    if message:
+        return _fail(message, code=400, status=400)
+    job.save()
+    scheduler_service.refresh_crontab()
+    return _ok(_scheduler_job_to_dict(job), message="任务已更新")
+
+
+@csrf_exempt
+@require_POST
+def scheduler_job_delete(request, pk):
+    job = get_object_or_404(SchedulerJob, pk=pk)
+    scheduler_service.remove_job_from_crontab(job.name)
+    job.delete()
+    return _ok({"id": pk}, message="任务已删除")
+
+
+@csrf_exempt
+@require_POST
+def scheduler_job_run(request, pk):
+    job = get_object_or_404(SchedulerJob, pk=pk)
+    run = scheduler_service.run_job(job)
+    return _ok(
+        {
+            "run_id": run.id,
+            "status": run.status,
+            "exit_code": run.exit_code,
+            "duration_ms": run.duration_ms,
+            "output": run.output,
+        },
+        message={
+            "success": "执行完成",
+            "failed": "执行失败",
+            "timeout": "执行超时",
+        }.get(run.status, "执行完成"),
+    )
+
+
+@require_GET
+def scheduler_runs(request):
+    job_id = request.GET.get("job")
+    runs = SchedulerRun.objects.all()
+    if job_id:
+        runs = runs.filter(job_id=job_id)
+    return _ok(
+        list(
+            runs.order_by("-started_at")[:50].values(
+                "id", "job_id", "status", "exit_code", "duration_ms", "started_at"
+            )
+        )
+    )
+
+
+@csrf_exempt
+@require_POST
+def scheduler_refresh_cron(request):
+    try:
+        result = scheduler_service.refresh_crontab()
+    except Exception as exc:
+        return _fail(f"刷新失败: {exc}", code=500, status=500)
+    return _ok(result, message=f"crontab 已同步 {result['jobs_in_crontab']} 个启用任务")

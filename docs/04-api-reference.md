@@ -119,6 +119,20 @@ curl -X POST http://127.0.0.1:8000/api/metadata/reconcile/tasks/1/run/
 
 受管目录: `tools/` `etl/` `flink_sql/` `doris_sql/` `hive_sql/`, 仅支持 `.sh` / `.py`。
 
+## 10. 调度中心
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/scheduler/jobs/` | 调度任务列表(含最近执行) |
+| POST | `/scheduler/jobs/create/` | 新建(script/etl, cron 时/分, args) |
+| POST | `/scheduler/jobs/<id>/update/` | 更新(自动同步 crontab) |
+| POST | `/scheduler/jobs/<id>/delete/` | 删除(移除 crontab 行) |
+| POST | `/scheduler/jobs/<id>/run/` | 立即执行 |
+| GET | `/scheduler/runs/?job=` | 执行历史 |
+| POST | `/scheduler/cron/refresh/` | 重建全部启用任务的 crontab 行 |
+
+命令行: `python manage.py scheduler_run --job <id>`(crontab 使用)。
+
 ```bash
 curl -X POST http://127.0.0.1:8000/api/metadata/llm/analyze/ \
   -H "Content-Type: application/json" \

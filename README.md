@@ -58,6 +58,7 @@ python manage.py runserver
 - `/sql-helper/` — SQL 助手: 选库选表一键生成 SELECT/INSERT/UPDATE/DELETE/COUNT
 - `/ai-sql/` — AI 辅助写 SQL(生成/优化/解释, 可关联元数据上下文)
 - `/spark2sql/` — Spark 代码 → Hive SQL(Java/Scala/Python, AI 转换)
+- `/scheduler/` — 调度中心: 调度脚本管理中的 shell/python 与 ETL 脚本(cron 写 crontab)
 - `/reconcile/` — 数据对账中心(五种对账任务)
 - `/sql-files/` — SQL 文件库(可配置远程 Linux 目录)
 - `/lineage/` — SQL 血缘关系

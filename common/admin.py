@@ -12,6 +12,8 @@ from .models import (
     ReconcileRun,
     ReconcileTask,
     ScriptRun,
+    SchedulerJob,
+    SchedulerRun,
 )
 
 
@@ -94,3 +96,16 @@ class ScriptRunAdmin(admin.ModelAdmin):
     list_display = ("started_at", "script_path", "status", "exit_code", "duration_ms")
     list_filter = ("status",)
     search_fields = ("script_path",)
+
+
+@admin.register(SchedulerJob)
+class SchedulerJobAdmin(admin.ModelAdmin):
+    list_display = ("name", "job_type", "script_path", "cron_fields", "enabled", "updated_at")
+    list_filter = ("job_type", "enabled")
+    search_fields = ("name", "script_path")
+
+
+@admin.register(SchedulerRun)
+class SchedulerRunAdmin(admin.ModelAdmin):
+    list_display = ("job", "status", "exit_code", "duration_ms", "started_at")
+    list_filter = ("status",)

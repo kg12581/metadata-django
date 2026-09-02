@@ -1,0 +1,163 @@
+{% extends "common/base.html" %}
+{% block title %}调度中心 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h2 style="margin:0 0 4px">调度中心</h2>
+      <div class="muted">调度脚本管理中的 shell/python 脚本与 ETL 脚本; 启用任务自动写入 crontab</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="openForm(null)">新建任务</button>
+      <button class="btn ghost" onclick="refreshCron()">同步 crontab</button>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="formCard" style="display:none">
+  <h3 id="formTitle">新建调度任务</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;max-width:1000px">
+    <div><label class="muted">任务名 *</label><input id="fName" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></div>
+    <div><label class="muted">类型</label>
+      <select id="fType" onchange="typeChanged()" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px">
+        <option value="script">脚本(脚本管理)</option>
+        <option value="etl">ETL(Kafka->Doris)</option>
+      </select>
+    </div>
+    <div><label class="muted">脚本(类型=脚本)</label><select id="fScript" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></select></div>
+    <div><label class="muted">每天执行(时 分)</label><div style="display:flex;gap:8px"><input id="fHour" type="number" value="2" min="0" max="23" style="flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:8px"><input id="fMin" type="number" value="0" min="0" max="59" style="flex:1;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></div></div>
+    <div><label class="muted">超时秒</label><input id="fTimeout" type="number" value="900" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px"></div>
+  </div>
+  <div style="margin-top:12px;max-width:1000px">
+    <label class="muted">参数(空格分隔; ETL 如: --date 2026-09-01 --dry-run, 留空默认昨天)</label>
+    <input id="fArgs" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace">
+  </div>
+  <div style="margin-top:12px;display:flex;gap:16px;align-items:center">
+    <label style="display:flex;gap:6px;align-items:center"><input id="fEnabled" type="checkbox" checked> 启用(写入 crontab)</label>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="saveForm()">保存</button>
+      <button class="btn ghost" onclick="document.getElementById('formCard').style.display='none'">取消</button>
+    </div>
+  </div>
+</div>
+
+<div class="card"><div id="jobList"></div></div>
+
+<div class="card">
+  <h3>运行输出 / 历史</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:360px;font-size:12px;margin:0">暂无。</pre>
+  <div id="runHistory" style="margin-top:10px"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let editId=null; let scripts=[]; let jobsCache=[];
+function showOutput(t){document.getElementById('resultArea').textContent=typeof t==='string'?t:JSON.stringify(t,null,2);}
+
+async function loadScripts(){
+  const resp=await fetch('/api/metadata/scripts/');
+  const data=await resp.json();
+  scripts=(data.data&&data.data.scripts)||[];
+  const sel=document.getElementById('fScript');
+  sel.innerHTML='';
+  scripts.forEach(s=>{const o=document.createElement('option');o.value=s.path;o.textContent='['+s.dir+'/'+s.kind+'] '+s.name;sel.appendChild(o);});
+}
+
+function typeChanged(){
+  document.getElementById('fScript').disabled = document.getElementById('fType').value!=='script';
+}
+
+function openForm(job){
+  editId=job?job.id:null;
+  document.getElementById('formTitle').textContent=job?'编辑: '+job.name:'新建调度任务';
+  document.getElementById('fName').value=job?job.name:'';
+  document.getElementById('fType').value=job?job.job_type:'script';
+  document.getElementById('fScript').value=job?(job.script_path||''):'';
+  document.getElementById('fHour').value=job?job.cron_hour:2;
+  document.getElementById('fMin').value=job?job.cron_minute:0;
+  document.getElementById('fTimeout').value=job?job.timeout_seconds:900;
+  document.getElementById('fArgs').value=job?(job.args||[]).join(' '):'';
+  document.getElementById('fEnabled').checked=job?job.enabled:true;
+  typeChanged();
+  document.getElementById('formCard').style.display='block';
+}
+
+async function saveForm(){
+  const payload={
+    name:document.getElementById('fName').value.trim(),
+    job_type:document.getElementById('fType').value,
+    script_path:document.getElementById('fScript').value,
+    args_text:document.getElementById('fArgs').value,
+    cron_hour:parseInt(document.getElementById('fHour').value||'2'),
+    cron_minute:parseInt(document.getElementById('fMin').value||'0'),
+    timeout_seconds:parseInt(document.getElementById('fTimeout').value||'900'),
+    enabled:document.getElementById('fEnabled').checked
+  };
+  const url=editId?'/api/metadata/scheduler/jobs/'+editId+'/update/':'/api/metadata/scheduler/jobs/create/';
+  const resp=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const data=await resp.json();
+  showOutput(data);
+  if(data.code===0){document.getElementById('formCard').style.display='none';loadJobs();}
+}
+
+async function loadJobs(){
+  const resp=await fetch('/api/metadata/scheduler/jobs/');
+  const data=await resp.json();
+  const box=document.getElementById('jobList');
+  box.innerHTML='';
+  const jobs=data.data||[];
+  jobsCache=jobs;
+  if(!jobs.length){box.textContent='暂无调度任务。';return;}
+  const table=document.createElement('table');
+  table.innerHTML='<thead><tr><th>任务</th><th>类型/脚本</th><th>Cron</th><th>状态</th><th>最近执行</th><th>操作</th></tr></thead>';
+  const tbody=document.createElement('tbody');
+  jobs.forEach(j=>{
+    const last=j.last_run?j.last_run.status+' exit='+(j.last_run.exit_code==null?'-':j.last_run.exit_code):'-';
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td><strong>'+j.name+'</strong></td><td>'+(j.job_type==='etl'?'ETL':'<span class="mono">'+j.script_path+'</span>')+'</td>'+
+      '<td class="mono">'+j.cron_fields+'</td><td>'+(j.enabled?'<span class="badge synced">启用</span>':'<span class="badge pending">停用</span>')+'</td>'+
+      '<td>'+last+'</td>'+
+      '<td style="white-space:nowrap"><a href="#" onclick="runJob('+j.id+');return false">运行</a> | <a href="#" onclick="editJob('+j.id+');return false">编辑</a> | <a href="#" style="color:#b91c1c" onclick="delJob('+j.id+');return false">删除</a></td>';
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody); box.appendChild(table);
+}
+
+function editJob(id){const j=jobsCache.find(x=>x.id===id); if(j) openForm(j);}
+
+async function runJob(id){
+  if(!confirm('确定立即执行该任务？'))return;
+  showOutput({message:'执行中...'});
+  const resp=await fetch('/api/metadata/scheduler/jobs/'+id+'/run/',{method:'POST'});
+  const data=await resp.json();
+  showOutput(data); loadJobs(); loadRuns();
+}
+
+async function delJob(id){
+  if(!confirm('确定删除该任务并移除 crontab？'))return;
+  const resp=await fetch('/api/metadata/scheduler/jobs/'+id+'/delete/',{method:'POST'});
+  showOutput(await resp.json()); loadJobs();
+}
+
+async function refreshCron(){
+  const resp=await fetch('/api/metadata/scheduler/cron/refresh/',{method:'POST'});
+  showOutput(await resp.json());
+}
+
+async function loadRuns(){
+  const resp=await fetch('/api/metadata/scheduler/runs/');
+  const data=await resp.json();
+  const box=document.getElementById('runHistory');
+  box.innerHTML='<div class="muted">最近执行</div>';
+  (data.data||[]).slice(0,15).forEach(r=>{
+    const row=document.createElement('div');
+    row.style.cssText='padding:3px 0;font-size:13px;border-bottom:1px solid #f1f5f9';
+    const color=r.status==='success'?'#166534':(r.status==='failed'?'#b91c1c':'#854d0e');
+    row.innerHTML='<span class="muted">'+String(r.started_at).replace('T',' ').slice(0,19)+'</span> job#'+r.job_id+' <span style="color:'+color+'">'+r.status+'</span> exit='+(r.exit_code==null?'-':r.exit_code)+' '+(r.duration_ms||0)+'ms';
+    box.appendChild(row);
+  });
+}
+
+loadScripts(); loadJobs(); loadRuns();
+</script>
+{% endblock %}

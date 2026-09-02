@@ -59,4 +59,11 @@ urlpatterns = [
     path("scripts/delete/", views.scripts_delete, name="scripts-delete"),
     path("scripts/run/", views.scripts_run, name="scripts-run"),
     path("scripts/runs/", views.scripts_runs, name="scripts-runs"),
+    path("scheduler/jobs/", views.scheduler_jobs, name="scheduler-jobs"),
+    path("scheduler/jobs/create/", views.scheduler_job_create, name="scheduler-job-create"),
+    path("scheduler/jobs/<int:pk>/update/", views.scheduler_job_update, name="scheduler-job-update"),
+    path("scheduler/jobs/<int:pk>/delete/", views.scheduler_job_delete, name="scheduler-job-delete"),
+    path("scheduler/jobs/<int:pk>/run/", views.scheduler_job_run, name="scheduler-job-run"),
+    path("scheduler/runs/", views.scheduler_runs, name="scheduler-runs"),
+    path("scheduler/cron/refresh/", views.scheduler_refresh_cron, name="scheduler-cron-refresh"),
 ]

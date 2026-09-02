@@ -77,6 +77,7 @@ flowchart LR
 | SQL 助手 | `/sql-helper/` |
 | 对账中心 / SQL 文件库 / 血缘 / 文档 | `/reconcile/`, `/sql-files/`, `/lineage/`, `/docs/` |
 | 运营看板 / 脚本管理 | `/ops/`, `/scripts/` |
+| 调度中心 | `/scheduler/`(脚本 + ETL 定时执行) |
 | 表列表 / 表详情 | `/databases/<id>/`, `/tables/<id>/` |
 | Django Admin | `/admin/` |
 
@@ -101,6 +102,9 @@ python manage.py runserver # http://127.0.0.1:8000/
 | 行数对账(源 vs Doris) | `manage.py reconcile_counts` | `0 7 * * * ... --database ai_chatbot --doris-db test_db` |
 
 行数对账示例与告警:
+
+调度中心(SchedulerJob)启用后会把每个任务写成独立 crontab 行
+(`manage.py scheduler_run --job <id>`), 支持 shell/python/ETL 三类任务、启停与手动运行。
 
 ```bash
 python manage.py reconcile_counts --database ai_chatbot --doris-db test_db
