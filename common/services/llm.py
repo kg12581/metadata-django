@@ -6,6 +6,8 @@ import os
 import urllib.error
 import urllib.request
 
+from ..config import load_dotenv
+
 
 class LLMNotConfigured(Exception):
     pass
@@ -16,6 +18,7 @@ def _env(name: str, default: str = "") -> str:
 
 
 def chat(prompt: str, system: str | None = None, max_tokens: int = 1500) -> str:
+    load_dotenv()  # 每次调用前刷新 .env(支持运行中修改 key 后直接生效)
     api_key = _env("LLM_API_KEY") or _env("DEEPSEEK_API_KEY")
     if not api_key:
         raise LLMNotConfigured(
