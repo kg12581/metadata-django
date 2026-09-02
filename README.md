@@ -342,7 +342,7 @@ python manage.py createsuperuser
 ## 项目结构
 
 ```text
-metadata_django/      Django 项目配置
+core/                 Django 项目配置(settings/urls/wsgi/asgi)
 templates/common/     Web 界面模板
 doris_sql/            Doris 建表/变更模板 + MySQL->Doris DDL 生成脚本
 hive_sql/             Hive 外部表模板 + MySQL->Hive DDL 生成脚本

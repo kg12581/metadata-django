@@ -33,7 +33,7 @@ MIDDLEWARE = [
     "common.middleware.AnalyticsMiddleware",
 ]
 
-ROOT_URLCONF = "metadata_django.urls"
+ROOT_URLCONF = "core.urls"
 
 TEMPLATES = [
     {
@@ -51,8 +51,8 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "metadata_django.wsgi.application"
-ASGI_APPLICATION = "metadata_django.asgi.application"
+WSGI_APPLICATION = "core.wsgi.application"
+ASGI_APPLICATION = "core.asgi.application"
 
 DATABASES = {
     "default": {
