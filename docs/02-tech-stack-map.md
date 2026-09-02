@@ -75,6 +75,8 @@
 
 1. 调度统一: 接入 DolphinScheduler, 元数据同步 → 结构同步 → T+1 数据同步串成工作流
 2. 对账任务: 每日 MySQL/PG 行数与 Doris/Hive 行数对账 + 告警
+   - ✅ 已提供 `manage.py reconcile_counts`(MySQL/PG 源, 可选钉钉类 webhook 告警)
+   - 待接: DolphinScheduler 每日调度 + Hive 侧对账 + 监控大盘
 3. Oracle/Hive 读取器: 支持 `sources` 页面配置后一键同步 Oracle、Hive(metastore)
 
 ### P1(中期, 治理与体验)

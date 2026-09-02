@@ -92,6 +92,17 @@ python manage.py runserver # http://127.0.0.1:8000/
 | 结构同步(Doris DDL) | `manage.py schema_sync --apply` + 管理页面 | `0 3 * * * tools/run_schema_sync.sh`(已装) |
 | Kafka T+1 增量 | `etl/run_daily_t1.sh` | `30 1 * * * etl/run_daily_t1.sh` |
 | Flink 结构变更监控 | `manage.py flink_sync --check` | `*/10 * * * * manage.py flink_sync --check` |
+| 行数对账(源 vs Doris) | `manage.py reconcile_counts` | `0 7 * * * ... --database ai_chatbot --doris-db test_db` |
+
+行数对账示例与告警:
+
+```bash
+python manage.py reconcile_counts --database ai_chatbot --doris-db test_db
+python manage.py reconcile_counts --database ai_chatbot --tables orders,users \
+  --webhook https://oapi.dingtalk.com/robot/send?access_token=xxx
+```
+
+不一致时退出码为 1 并(可选)向 webhook 发送告警; 环境变量 `RECONCILE_WEBHOOK` 可替代 `--webhook`。
 
 ## 关键设计约定
 

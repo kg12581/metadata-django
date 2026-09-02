@@ -22,6 +22,7 @@
 - 内置 Web 界面(数据源总览/表列表/表详情) + REST API + Django Admin
 - 页面定时自动同步(默认每 10 分钟, 可开关/调间隔)
 - 单个数据源元数据导出 Excel(.xlsx, 表/字段/索引/约束 四个工作表)
+- 行数对账: `manage.py reconcile_counts`(MySQL/PG vs Doris, 可选 webhook 告警)
 
 ## 快速开始
 
