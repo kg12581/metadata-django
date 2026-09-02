@@ -100,6 +100,7 @@ curl -X POST http://127.0.0.1:8000/api/metadata/reconcile/tasks/1/run/
 | POST | `/lineage/parse/` | 解析/保存 SQL 血缘 |
 | POST | `/lineage/clear/` | 清空血缘 |
 | POST | `/llm/analyze/` | AI 分析 SQL/元数据(需 LLM_API_KEY) |
+| POST | `/llm/sql-assist/` | AI 辅助写 SQL(generate/optimize/explain, 可带 table_id) |
 | GET | `/docs/` / `/docs/file/?name=` | 文档列表/内容(HTML) |
 | GET | `/ops/summary/?days=7` | 运营看板汇总 |
 

@@ -1,0 +1,116 @@
+{% extends "common/base.html" %}
+{% block title %}AI 写 SQL - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0 0 4px">AI 辅助写 SQL</h2>
+  <div class="muted">生成 / 优化 / 解释 SQL; 可选关联平台元数据作为上下文(需配置 LLM_API_KEY)</div>
+</div>
+
+<div class="card">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+    <button class="btn" id="modeGenerate" onclick="setMode('generate')">生成 SQL</button>
+    <button class="btn ghost" id="modeOptimize" onclick="setMode('optimize')">优化 SQL</button>
+    <button class="btn ghost" id="modeExplain" onclick="setMode('explain')">解释 SQL</button>
+  </div>
+  <div class="toolbar" style="margin-bottom:8px">
+    <label class="muted" id="reqLabel">描述需求(自然语言):</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <select id="dbSelect" onchange="loadTables()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px">
+        <option value="">不关联元数据</option>
+      </select>
+      <select id="tableSelect" onchange="loadTableMeta()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px">
+        <option value="">(先选数据源)</option>
+      </select>
+    </div>
+  </div>
+  <textarea id="requestBox" rows="6" placeholder="例如: 统计 ai_chatbot 每类事件近 7 天数量, 按事件类型分组" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px;box-sizing:border-box"></textarea>
+  <div id="metaHint" class="muted" style="margin:8px 0"></div>
+  <div style="margin-top:10px;display:flex;gap:8px">
+    <button class="btn" onclick="runAssist()">开始</button>
+    <button class="btn ghost" onclick="copyResult()">复制结果</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>AI 输出</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:480px;font-size:13px;margin:0;white-space:pre-wrap">暂无输出。</pre>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let currentMode = 'generate';
+let currentTableId = '';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('modeGenerate').className = 'btn' + (mode === 'generate' ? '' : ' ghost');
+  document.getElementById('modeOptimize').className = 'btn' + (mode === 'optimize' ? '' : ' ghost');
+  document.getElementById('modeExplain').className = 'btn' + (mode === 'explain' ? '' : ' ghost');
+  document.getElementById('reqLabel').textContent =
+    mode === 'generate' ? '描述需求(自然语言):' : (mode === 'optimize' ? '待优化 SQL:' : '待解释 SQL:');
+}
+
+async function loadOptions() {
+  const resp = await fetch('/api/metadata/sql-helper/options/');
+  const data = await resp.json();
+  const sel = document.getElementById('dbSelect');
+  (data.data || []).forEach(db => {
+    const o = document.createElement('option');
+    o.value = db.id;
+    o.textContent = '[' + db.db_type + '] ' + db.database_name;
+    sel.appendChild(o);
+  });
+}
+
+async function loadTables() {
+  const sel = document.getElementById('tableSelect');
+  sel.innerHTML = '<option value="">(先选数据源)</option>';
+  const dbId = document.getElementById('dbSelect').value;
+  if (!dbId) return;
+  const resp = await fetch('/api/metadata/sql-helper/tables/?db_id=' + dbId);
+  const data = await resp.json();
+  (data.data || []).slice(0, 500).forEach(t => {
+    const o = document.createElement('option');
+    o.value = t.id;
+    o.textContent = t.name;
+    sel.appendChild(o);
+  });
+}
+
+async function loadTableMeta() {
+  currentTableId = document.getElementById('tableSelect').value;
+  const hint = document.getElementById('metaHint');
+  if (!currentTableId) { hint.textContent = ''; return; }
+  const resp = await fetch('/api/metadata/sql-helper/table/' + currentTableId + '/');
+  const data = await resp.json();
+  const info = data.data;
+  hint.textContent = '已关联元数据: ' + info.database.database_name + '.' + info.table.name +
+    ' (' + info.columns.length + ' 字段) — 将作为上下文提供给 AI';
+}
+
+async function runAssist() {
+  const request = document.getElementById('requestBox').value.trim();
+  if (!request) { alert('请输入需求或 SQL'); return; }
+  const area = document.getElementById('resultArea');
+  area.textContent = 'AI 处理中...';
+  const resp = await fetch('/api/metadata/llm/sql-assist/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ request: request, mode: currentMode, table_id: currentTableId || null })
+  });
+  const data = await resp.json();
+  if (data.code === 0) {
+    area.textContent = data.data.result;
+  } else {
+    area.textContent = data.message;
+  }
+}
+
+async function copyResult() {
+  const text = document.getElementById('resultArea').textContent;
+  if (text && text !== '暂无输出。') await navigator.clipboard.writeText(text);
+}
+
+loadOptions();
+</script>
+{% endblock %}

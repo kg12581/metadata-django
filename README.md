@@ -56,6 +56,7 @@ python manage.py runserver
 - `/flink-sql/` — Flink SQL 实时 CDC 作业文件查看
 - `/sources/` — 元数据源配置(MySQL/PG/Oracle/Hive/Doris/SQL Server/Kafka, JDBC)
 - `/sql-helper/` — SQL 助手: 选库选表一键生成 SELECT/INSERT/UPDATE/DELETE/COUNT
+- `/ai-sql/` — AI 辅助写 SQL(生成/优化/解释, 可关联元数据上下文)
 - `/reconcile/` — 数据对账中心(五种对账任务)
 - `/sql-files/` — SQL 文件库(可配置远程 Linux 目录)
 - `/lineage/` — SQL 血缘关系

@@ -60,3 +60,25 @@ def analyze_metadata(metadata_text: str) -> str:
         "主键/索引建议、数据字典注释缺失点。用中文简洁列出。"
     )
     return chat(f"元数据:\n{metadata_text}", system=system)
+
+
+def sql_assist(request_text: str, mode: str, metadata: str = "") -> str:
+    """AI 辅助写 SQL: generate / optimize / explain 三种模式。"""
+    mode = mode or "generate"
+    system = (
+        "你是一名资深大数据工程师与 SQL 专家, 熟悉 MySQL/PostgreSQL/Doris/Hive 语法差异。"
+        "请直接给出可直接执行的 SQL, 放在 ```sql 代码块中, 并附 2-3 句中文要点说明。"
+        "若字段信息不足, 基于常见表结构给出合理假设并在说明中注明。"
+    )
+    if mode == "optimize":
+        prompt = (
+            f"请优化以下 SQL, 指出问题并给出优化后的 SQL:\n```sql\n{request_text}\n```"
+        )
+    elif mode == "explain":
+        prompt = f"请用中文解释以下 SQL 的用途、逻辑和执行顺序:\n```sql\n{request_text}\n```"
+    else:
+        prompt = (
+            f"根据需求生成 SQL: {request_text}\n\n"
+            f"可参考的表结构元数据:\n{metadata or '(未提供, 请自行假设合理表结构)'}"
+        )
+    return chat(prompt, system=system, max_tokens=2000)

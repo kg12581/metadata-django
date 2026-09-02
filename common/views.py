@@ -1325,6 +1325,54 @@ def llm_analyze(request):
     return _ok({"analysis": text}, message="分析完成")
 
 
+@require_GET
+def ai_sql_page(request):
+    """前端页面: AI 辅助写 SQL。"""
+    return render(request, "common/ai_sql.html", {})
+
+
+@csrf_exempt
+@require_POST
+def llm_sql_assist(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    request_text = str(payload.get("request") or "").strip()
+    mode = str(payload.get("mode") or "generate").strip()
+    if not request_text:
+        return _fail("request 不能为空", code=400, status=400)
+    if mode not in ("generate", "optimize", "explain"):
+        return _fail("mode 只能是 generate/optimize/explain", code=400, status=400)
+
+    metadata = ""
+    if payload.get("table_id"):
+        table = (
+            MetadataTable.objects.filter(pk=payload["table_id"])
+            .select_related("database")
+            .first()
+        )
+        if table:
+            columns = [
+                f"{c.name} {c.column_type or c.data_type}"
+                + (f" 注释:{c.comment}" if c.comment else "")
+                for c in table.columns.all()
+            ]
+            metadata = (
+                f"表 {table.database.database_name}.{table.name} 注释:{table.comment}\n"
+                + "\n".join(columns)
+            )
+    elif payload.get("metadata"):
+        metadata = str(payload["metadata"])
+
+    try:
+        text = llm_service.sql_assist(request_text, mode, metadata)
+    except llm_service.LLMNotConfigured as exc:
+        return _fail(str(exc), code=400, status=400)
+    except Exception as exc:
+        return _fail(f"AI 调用失败: {exc}", code=500, status=500)
+    return _ok({"mode": mode, "result": text}, message="AI 完成")
+
+
 # ---------------------------------------------------------------- 运营看板
 
 @require_GET
