@@ -43,7 +43,7 @@ python manage.py migrate
 python manage.py runserver
 ```
 
-打开 http://127.0.0.1:8000/api/metadata/ 查看接口列表。
+打开 http://127.0.0.1:8000/docs/ 在线查看文档(含 [API 调用文档](docs/04-api-reference.md))。
 
 ## Web 界面
 

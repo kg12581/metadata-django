@@ -49,5 +49,11 @@ function toggleRaw(){
   if(!showRaw) openDoc(document.getElementById('docTitle').textContent);
 }
 loadDocs();
+// 支持 /docs/?file=xxx.md 直接打开指定文档
+const urlParams = new URLSearchParams(window.location.search);
+const fileParam = urlParams.get('file');
+if (fileParam) {
+  openDoc(fileParam);
+}
 </script>
 {% endblock %}

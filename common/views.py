@@ -79,38 +79,6 @@ def _tables_from_payload(payload: dict) -> tuple[list[str] | None, str | None]:
 
 
 @require_GET
-def index(request):
-    return _ok(
-        {
-            "endpoints": [
-                "GET  /api/metadata/",
-                "GET  /api/metadata/databases/",
-                "GET  /api/metadata/databases/<id>/",
-                "GET  /api/metadata/tables/<id>/",
-                "GET  /api/metadata/databases/<id>/export/",
-                "POST /api/metadata/sync/",
-                "POST /api/metadata/datax/check/",
-                "POST /api/metadata/datax/sync/",
-                "POST /api/metadata/schema-sync/",
-                "GET  /api/metadata/schema-sync/task/",
-                "POST /api/metadata/schema-sync/task/save/",
-                "POST /api/metadata/schema-sync/run/",
-                "GET  /api/metadata/schema-sync/log/",
-                "GET  /api/metadata/etl/config/",
-                "POST /api/metadata/etl/config/save/",
-                "POST /api/metadata/etl/run/",
-                "GET  /api/metadata/etl/log/",
-                "GET  /api/metadata/flink-sql/files/",
-                "GET  /api/metadata/flink-sql/file/?name=xxx.sql",
-                "GET  /api/metadata/flink-sync/jobs/",
-                "POST /api/metadata/flink-sync/generate/",
-                "POST /api/metadata/flink-sync/apply/",
-            ]
-        }
-    )
-
-
-@require_GET
 def database_list(request):
     databases = MetadataDatabase.objects.prefetch_related("tables").all()
     return _ok([database_to_dict(db) for db in databases])

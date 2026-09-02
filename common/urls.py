@@ -5,7 +5,6 @@ from . import views
 app_name = "common"
 
 urlpatterns = [
-    path("", views.index, name="index"),
     path("databases/", views.database_list, name="database-list"),
     path("databases/<int:pk>/export/", views.export_database_excel, name="database-export"),
     path("databases/<int:pk>/", views.database_detail, name="database-detail"),
