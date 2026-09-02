@@ -50,4 +50,5 @@ urlpatterns = [
     path("lineage/parse/", views.lineage_parse, name="lineage-parse"),
     path("lineage/clear/", views.lineage_clear, name="lineage-clear"),
     path("llm/analyze/", views.llm_analyze, name="llm-analyze"),
+    path("ops/summary/", views.ops_summary, name="ops-summary"),
 ]

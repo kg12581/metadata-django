@@ -1,0 +1,97 @@
+{% extends "common/base.html" %}
+{% block title %}运营看板 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div><h2 style="margin:0 0 4px">运营看板</h2><div class="muted">基于服务端埋点(AnalyticsEvent)统计请求量/成功率/热点接口/错误</div></div>
+    <select id="rangeSel" onchange="loadSummary()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px">
+      <option value="1">近 1 天</option>
+      <option value="7" selected>近 7 天</option>
+      <option value="30">近 30 天</option>
+    </select>
+  </div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px" id="cards"></div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px;margin-top:16px">
+  <div class="card">
+    <h3>每日请求量</h3>
+    <div id="dayChart" style="display:flex;align-items:end;gap:8px;height:180px"></div>
+  </div>
+  <div class="card">
+    <h3>热点接口 TOP</h3>
+    <div id="topPaths"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h3>最近请求</h3>
+  <table>
+    <thead><tr><th>时间</th><th>方法</th><th>路径</th><th>状态</th><th>耗时 ms</th><th>用户</th></tr></thead>
+    <tbody id="recentTable"></tbody>
+  </table>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+async function loadSummary(){
+  const days = document.getElementById('rangeSel').value;
+  const resp = await fetch('/api/metadata/ops/summary/?days='+days);
+  const data = (await resp.json()).data;
+  const cards = document.getElementById('cards');
+  const mk = (label, value, color) => {
+    const d=document.createElement('div');
+    d.className='card'; d.style.cssText='margin:0;text-align:center';
+    d.innerHTML='<div class="muted">'+label+'</div><div style="font-size:28px;font-weight:700;color:'+color+'">'+value+'</div>';
+    cards.appendChild(d);
+  };
+  cards.innerHTML='';
+  mk('近 '+days+' 天请求', data.total, '#0f172a');
+  mk('成功率', data.success_rate+'%', '#166534');
+  mk('错误数', data.errors, '#b91c1c');
+
+  const chart=document.getElementById('dayChart');
+  chart.innerHTML='';
+  const max=Math.max(1, ...data.by_day.map(d=>d.count));
+  data.by_day.forEach(d=>{
+    const col=document.createElement('div');
+    col.style.cssText='flex:1;display:flex;flex-direction:column;justify-content:end;align-items:center;gap:4px;height:100%';
+    const bar=document.createElement('div');
+    bar.style.cssText='width:70%;background:#2563eb;border-radius:6px 6px 0 0;min-height:2px';
+    bar.style.height=(d.count/max*150)+'px';
+    bar.title=d.count;
+    const label=document.createElement('div');
+    label.className='muted'; label.textContent=d.day.slice(5);
+    col.appendChild(bar); col.appendChild(label);
+    chart.appendChild(col);
+  });
+
+  const top=document.getElementById('topPaths');
+  top.innerHTML='';
+  const tmax=Math.max(1,...data.top_paths.map(p=>p.count));
+  data.top_paths.forEach(p=>{
+    const row=document.createElement('div');
+    row.style.cssText='margin-bottom:8px';
+    const bar=document.createElement('div');
+    bar.style.cssText='height:14px;background:#e2e8f0;border-radius:4px;position:relative;overflow:hidden';
+    const fill=document.createElement('div');
+    fill.style.cssText='height:100%;background:#10b981;width:'+(p.count/tmax*100)+'%';
+    bar.appendChild(fill);
+    row.innerHTML='<div style="display:flex;justify-content:space-between" class="muted"><span>'+p.method+' '+p.path+'</span><span>'+p.count+'</span></div>';
+    row.appendChild(bar);
+    top.appendChild(row);
+  });
+
+  const tb=document.getElementById('recentTable');
+  tb.innerHTML='';
+  data.recent.forEach(r=>{
+    const tr=document.createElement('tr');
+    const cls = r.status_code>=400 ? 'style="color:#b91c1c"' : '';
+    tr.innerHTML='<td>'+String(r.created_at).replace('T',' ').slice(0,19)+'</td><td>'+r.method+'</td><td class="mono" style="max-width:420px;overflow:hidden;text-overflow:ellipsis">'+r.path+'</td><td '+cls+'>'+r.status_code+'</td><td>'+r.duration_ms+'</td><td>'+(r.username||'-')+'</td>';
+    tb.appendChild(tr);
+  });
+}
+loadSummary();
+</script>
+{% endblock %}

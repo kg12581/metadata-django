@@ -7,6 +7,7 @@ from pathlib import Path
 
 from django.http import HttpResponse, JsonResponse
 from django.db.models import Count
+from django.db.models.functions import TruncDate
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
@@ -14,6 +15,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from .config import get_datax_config, get_database_config, get_doris_config
 from .models import (
+    AnalyticsEvent,
     LineageEdge,
     MetadataDatabase,
     MetadataSourceConfig,
@@ -1352,3 +1354,58 @@ def llm_analyze(request):
     except Exception as exc:
         return _fail(f"分析失败: {exc}", code=500, status=500)
     return _ok({"analysis": text}, message="分析完成")
+
+
+# ---------------------------------------------------------------- 运营看板
+
+@require_GET
+def ops_page(request):
+    """前端页面: 运营看板。"""
+    return render(request, "common/ops.html", {})
+
+
+@require_GET
+def ops_summary(request):
+    try:
+        days = max(1, min(int(request.GET.get("days", 7)), 90))
+    except (TypeError, ValueError):
+        days = 7
+    from datetime import timedelta
+
+    since = timezone.now() - timedelta(days=days)
+    base = AnalyticsEvent.objects.filter(created_at__gte=since)
+    total = base.count()
+    errors = base.filter(status_code__gte=400).count()
+    by_day = list(
+        base.annotate(day=TruncDate("created_at"))
+        .values("day")
+        .annotate(count=Count("id"))
+        .order_by("day")
+    )
+    top_paths = list(
+        base.values("method", "path")
+        .annotate(count=Count("id"))
+        .order_by("-count")[:12]
+    )
+    status_dist = list(base.values("status_code").annotate(count=Count("id")).order_by("status_code"))
+    recent = list(
+        base.order_by("-created_at")[:30].values(
+            "created_at", "method", "path", "status_code", "duration_ms", "username"
+        )
+    )
+    return _ok(
+        {
+            "days": days,
+            "total": total,
+            "errors": errors,
+            "error_rate": round(errors / total * 100, 2) if total else 0,
+            "success_rate": round((total - errors) / total * 100, 2) if total else 0,
+            "by_day": [
+                {"day": item["day"].isoformat(), "count": item["count"]}
+                for item in by_day
+            ],
+            "top_paths": top_paths,
+            "status_dist": status_dist,
+            "recent": recent,
+        }
+    )

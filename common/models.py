@@ -195,6 +195,33 @@ class LineageEdge(models.Model):
         return f"{self.source_table} -> {self.target_table}"
 
 
+class AnalyticsEvent(models.Model):
+    """埋点: 记录请求与关键操作, 用于运营看板。"""
+
+    event_type = models.CharField("事件类型", max_length=20, default="request")
+    method = models.CharField("方法", max_length=10, blank=True, default="")
+    path = models.CharField("路径", max_length=500, blank=True, default="")
+    status_code = models.PositiveIntegerField("状态码", null=True, blank=True)
+    duration_ms = models.PositiveIntegerField("耗时 ms", default=0)
+    username = models.CharField("用户", max_length=150, blank=True, default="")
+    ip = models.CharField("IP", max_length=64, blank=True, default="")
+    detail = models.JSONField("详情", default=dict, blank=True)
+    created_at = models.DateTimeField("时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        verbose_name = "埋点事件"
+        verbose_name_plural = "埋点事件"
+        indexes = [
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["path"]),
+            models.Index(fields=["status_code"]),
+        ]
+
+    def __str__(self):
+        return f"{self.method} {self.path} -> {self.status_code} @ {self.created_at:%H:%M:%S}"
+
+
 class MetadataTable(models.Model):
     """远端库中的一张表或视图。"""
 

@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from .models import (
+    AnalyticsEvent,
     LineageEdge,
     MetadataColumn,
     MetadataConstraint,
@@ -77,3 +78,11 @@ class ReconcileRunAdmin(admin.ModelAdmin):
 class LineageEdgeAdmin(admin.ModelAdmin):
     list_display = ("source_table", "target_table", "sql_file", "created_at")
     search_fields = ("source_table", "target_table")
+
+
+@admin.register(AnalyticsEvent)
+class AnalyticsEventAdmin(admin.ModelAdmin):
+    list_display = ("created_at", "method", "path", "status_code", "duration_ms", "username", "ip")
+    list_filter = ("method", "status_code")
+    search_fields = ("path", "username", "ip")
+    date_hierarchy = "created_at"

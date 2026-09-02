@@ -93,6 +93,8 @@
 | 架构与模块使用 | `docs/01-architecture.md` |
 | 技术栈对照与扩展建议 | `docs/02-tech-stack-map.md` |
 | 本文件(链接大全) | `docs/03-official-docs-and-links.md` |
+| API 调用文档 | `docs/04-api-reference.md`(可在 `/docs/` 在线查看) |
+| MCP 服务文档 | `mcp/README.md` |
 | 主 README | `README.md` |
 | Kafka T+1 ETL | `etl/README.md` |
 | Flink SQL 作业 | `flink_sql/README.md`(文件头含建表/变更/FAQ) |

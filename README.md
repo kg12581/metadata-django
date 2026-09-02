@@ -10,6 +10,8 @@
 | [docs/01-architecture.md](docs/01-architecture.md) | 架构图 / 模块地图 / 页面与定时任务清单 |
 | [docs/02-tech-stack-map.md](docs/02-tech-stack-map.md) | 大数据开发技术栈对照与扩展建议(Roadmap) |
 | [docs/03-official-docs-and-links.md](docs/03-official-docs-and-links.md) | 官方文档与学习资源链接大全 |
+| [docs/04-api-reference.md](docs/04-api-reference.md) | API 调用文档(全部接口 + curl 示例) |
+| [mcp/README.md](mcp/README.md) | MCP 服务接入与 Tools 清单 |
 
 > 面向大数据开发场景: 元数据采集 → 结构校验/自动 DDL → Flink 实时 + T+1 批量双链路增量,
 > DataX 离线同步, Doris/Hive SQL 资产沉淀。技术栈逐层对照见 docs/02。
@@ -26,6 +28,8 @@
 - 对账中心: 行数 / 主键快照 / 字段值 / 业务指标 / 元数据 五种对账(页面 + API)
 - SQL 文件库(本地目录或远程 Linux SFTP) + SQL 血缘解析 + 大模型分析
 - Markdown 文档在线查看(/docs/)
+- 服务端埋点与运营看板(/ops/)
+- MCP 服务: 平台 API 暴露为 MCP tools(`mcp/server.py`)
 
 ## 快速开始
 
@@ -55,6 +59,7 @@ python manage.py runserver
 - `/sql-files/` — SQL 文件库(可配置远程 Linux 目录)
 - `/lineage/` — SQL 血缘关系
 - `/docs/` — 在线文档
+- `/ops/` — 运营看板(请求量/成功率/热点接口/错误)
 - `/databases/<id>/` — 某数据源下的表列表(支持按表名/注释搜索)
 - `/tables/<id>/` — 表详情: 字段/索引/约束
 
