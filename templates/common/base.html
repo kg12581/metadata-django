@@ -45,11 +45,10 @@
     .nav-scroll {
       display: flex;
       align-items: stretch;
-      overflow-x: auto;
+      overflow: visible;
       scrollbar-width: none;
       flex: 1;
     }
-    .nav-scroll::-webkit-scrollbar { display: none; }
     .nav-group { position: relative; }
     .nav-toggle {
       display: flex;
@@ -102,6 +101,14 @@
     @media (max-width: 720px) {
       .brand { font-size: 14px; padding-right: 8px; }
       .nav-toggle { padding: 0 8px; font-size: 13px; }
+      .nav-scroll { overflow-x: auto; }
+      .nav-group.open .dropdown {
+        position: static;
+        min-width: 0;
+        box-shadow: none;
+        border-radius: 0;
+        background: #f8fafc;
+      }
     }
     .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
     .card {
