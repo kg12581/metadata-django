@@ -11,6 +11,7 @@ from .models import (
     MetadataTable,
     ReconcileRun,
     ReconcileTask,
+    ScriptRun,
 )
 
 
@@ -86,3 +87,10 @@ class AnalyticsEventAdmin(admin.ModelAdmin):
     list_filter = ("method", "status_code")
     search_fields = ("path", "username", "ip")
     date_hierarchy = "created_at"
+
+
+@admin.register(ScriptRun)
+class ScriptRunAdmin(admin.ModelAdmin):
+    list_display = ("started_at", "script_path", "status", "exit_code", "duration_ms")
+    list_filter = ("status",)
+    search_fields = ("script_path",)

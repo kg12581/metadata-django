@@ -51,4 +51,11 @@ urlpatterns = [
     path("lineage/clear/", views.lineage_clear, name="lineage-clear"),
     path("llm/analyze/", views.llm_analyze, name="llm-analyze"),
     path("ops/summary/", views.ops_summary, name="ops-summary"),
+    path("scripts/", views.scripts_list, name="scripts-list"),
+    path("scripts/file/", views.scripts_read, name="scripts-read"),
+    path("scripts/save/", views.scripts_save, name="scripts-save"),
+    path("scripts/create/", views.scripts_create, name="scripts-create"),
+    path("scripts/delete/", views.scripts_delete, name="scripts-delete"),
+    path("scripts/run/", views.scripts_run, name="scripts-run"),
+    path("scripts/runs/", views.scripts_runs, name="scripts-runs"),
 ]

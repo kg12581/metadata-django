@@ -76,6 +76,7 @@ flowchart LR
 | 数据源配置(JDBC) | `/sources/` |
 | SQL 助手 | `/sql-helper/` |
 | 对账中心 / SQL 文件库 / 血缘 / 文档 | `/reconcile/`, `/sql-files/`, `/lineage/`, `/docs/` |
+| 运营看板 / 脚本管理 | `/ops/`, `/scripts/` |
 | 表列表 / 表详情 | `/databases/<id>/`, `/tables/<id>/` |
 | Django Admin | `/admin/` |
 

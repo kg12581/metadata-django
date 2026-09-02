@@ -222,6 +222,26 @@ class AnalyticsEvent(models.Model):
         return f"{self.method} {self.path} -> {self.status_code} @ {self.created_at:%H:%M:%S}"
 
 
+class ScriptRun(models.Model):
+    """脚本运行历史。"""
+
+    script_path = models.CharField("脚本路径", max_length=500)
+    args = models.JSONField("参数", default=list, blank=True)
+    status = models.CharField("状态", max_length=20, default="success")
+    exit_code = models.IntegerField("退出码", null=True, blank=True)
+    output = models.TextField("输出", blank=True, default="")
+    duration_ms = models.PositiveIntegerField("耗时 ms", default=0)
+    started_at = models.DateTimeField("开始时间", auto_now_add=True)
+
+    class Meta:
+        ordering = ["-started_at"]
+        verbose_name = "脚本运行"
+        verbose_name_plural = "脚本运行"
+
+    def __str__(self):
+        return f"{self.script_path} [{self.status}] @ {self.started_at:%H:%M:%S}"
+
+
 class MetadataTable(models.Model):
     """远端库中的一张表或视图。"""
 

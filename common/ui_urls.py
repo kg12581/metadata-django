@@ -18,6 +18,7 @@ urlpatterns = [
     path("sql-files/", views.sql_files_page, name="sql-files-page"),
     path("lineage/", views.lineage_page, name="lineage-page"),
     path("ops/", views.ops_page, name="ops-page"),
+    path("scripts/", views.scripts_page, name="scripts-page"),
     path("databases/<int:pk>/", views.database_detail_ui, name="database-detail"),
     path("tables/<int:pk>/", views.table_detail_ui, name="table-detail"),
 ]

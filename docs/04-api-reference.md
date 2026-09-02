@@ -103,6 +103,20 @@ curl -X POST http://127.0.0.1:8000/api/metadata/reconcile/tasks/1/run/
 | GET | `/docs/` / `/docs/file/?name=` | 文档列表/内容(HTML) |
 | GET | `/ops/summary/?days=7` | 运营看板汇总 |
 
+## 9. 脚本管理
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/scripts/` | 脚本列表(按目录分组) |
+| GET | `/scripts/file/?path=tools/x.py` | 读取脚本内容 |
+| POST | `/scripts/save/` | 保存脚本 |
+| POST | `/scripts/create/` | 新建脚本 |
+| POST | `/scripts/delete/` | 删除脚本 |
+| POST | `/scripts/run/` | 运行脚本(`path`, `args`, `timeout`) |
+| GET | `/scripts/runs/` | 运行历史 |
+
+受管目录: `tools/` `etl/` `flink_sql/` `doris_sql/` `hive_sql/`, 仅支持 `.sh` / `.py`。
+
 ```bash
 curl -X POST http://127.0.0.1:8000/api/metadata/llm/analyze/ \
   -H "Content-Type: application/json" \

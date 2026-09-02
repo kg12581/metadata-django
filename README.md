@@ -30,6 +30,7 @@
 - Markdown 文档在线查看(/docs/)
 - 服务端埋点与运营看板(/ops/)
 - MCP 服务: 平台 API 暴露为 MCP tools(`mcp/server.py`)
+- 脚本管理平台: 集中浏览/编辑/运行 shell 与 python 脚本(/scripts/)
 
 ## 快速开始
 
@@ -60,6 +61,7 @@ python manage.py runserver
 - `/lineage/` — SQL 血缘关系
 - `/docs/` — 在线文档
 - `/ops/` — 运营看板(请求量/成功率/热点接口/错误)
+- `/scripts/` — 脚本管理(shell/python: 查看/编辑/运行/历史)
 - `/databases/<id>/` — 某数据源下的表列表(支持按表名/注释搜索)
 - `/tables/<id>/` — 表详情: 字段/索引/约束
 

@@ -31,6 +31,7 @@ from .services import docs as docs_service
 from .services import lineage as lineage_service
 from .services import llm as llm_service
 from .services import sql_files as sql_files_service
+from .services import scripts as scripts_service
 from .services.reconcile_engine import run_task as run_reconcile_task
 from .services.schema_check import check_tables
 from .services.schema_sync import sync_table_schema
@@ -1409,3 +1410,113 @@ def ops_summary(request):
             "recent": recent,
         }
     )
+
+
+# ---------------------------------------------------------------- 脚本管理
+
+@require_GET
+def scripts_page(request):
+    return render(request, "common/scripts.html", {})
+
+
+@require_GET
+def scripts_list(request):
+    try:
+        entries = scripts_service.list_scripts()
+    except Exception as exc:
+        return _fail(f"读取失败: {exc}", code=500, status=500)
+    return _ok(
+        {
+            "dirs": scripts_service.SCRIPT_DIRS,
+            "scripts": entries,
+        }
+    )
+
+
+@require_GET
+def scripts_read(request):
+    path = request.GET.get("path", "")
+    try:
+        content = scripts_service.read_script(path)
+    except Exception as exc:
+        return _fail(f"读取失败: {exc}", code=500, status=500)
+    return _ok({"path": path, "content": content})
+
+
+@csrf_exempt
+@require_POST
+def scripts_save(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    path = str(payload.get("path") or "").strip()
+    content = str(payload.get("content") or "")
+    try:
+        result = scripts_service.save_script(path, content)
+    except Exception as exc:
+        return _fail(f"保存失败: {exc}", code=500, status=500)
+    return _ok(result, message="脚本已保存")
+
+
+@csrf_exempt
+@require_POST
+def scripts_create(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    try:
+        result = scripts_service.create_script(
+            str(payload.get("directory") or "tools").strip(),
+            str(payload.get("name") or "").strip(),
+            str(payload.get("content") or ""),
+        )
+    except Exception as exc:
+        return _fail(f"创建失败: {exc}", code=500, status=500)
+    return _ok(result, message="脚本已创建")
+
+
+@csrf_exempt
+@require_POST
+def scripts_delete(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    try:
+        result = scripts_service.delete_script(str(payload.get("path") or "").strip())
+    except Exception as exc:
+        return _fail(f"删除失败: {exc}", code=500, status=500)
+    return _ok(result, message="脚本已删除")
+
+
+@csrf_exempt
+@require_POST
+def scripts_run(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    try:
+        result = scripts_service.run_script(
+            str(payload.get("path") or "").strip(),
+            args=[str(a) for a in (payload.get("args") or [])],
+            timeout=int(payload.get("timeout", 600)),
+        )
+    except Exception as exc:
+        return _fail(f"运行失败: {exc}", code=500, status=500)
+    message = {
+        "success": "执行完成",
+        "failed": "执行失败",
+        "timeout": "执行超时",
+    }.get(result["status"], "执行完成")
+    return _ok(result, message=message)
+
+
+@require_GET
+def scripts_runs(request):
+    from .models import ScriptRun
+
+    runs = list(
+        ScriptRun.objects.order_by("-started_at")[:30].values(
+            "id", "script_path", "args", "status", "exit_code", "duration_ms", "started_at"
+        )
+    )
+    return _ok(runs)

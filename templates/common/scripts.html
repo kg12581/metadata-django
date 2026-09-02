@@ -1,0 +1,140 @@
+{% extends "common/base.html" %}
+{% block title %}脚本管理 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div><h2 style="margin:0 0 4px">脚本管理</h2><div class="muted">管理 tools / etl / flink_sql / doris_sql / hive_sql 下的 shell(.sh) 与 python(.py) 脚本</div></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="openCreate()">新建脚本</button>
+      <button class="btn ghost" onclick="loadScripts()">刷新</button>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="display:flex;gap:20px;flex-wrap:wrap">
+  <div id="scriptTree" style="min-width:260px;max-height:560px;overflow:auto"></div>
+  <div style="flex:1;min-width:420px">
+    <div class="toolbar" style="margin-bottom:0">
+      <h3 id="fileTitle" style="margin:0">选择脚本</h3>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <input id="runArgs" placeholder="运行参数(空格分隔)" style="width:200px;padding:7px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px">
+        <button class="btn ghost" onclick="saveScript()">保存</button>
+        <button class="btn" onclick="runScript()">运行</button>
+      </div>
+    </div>
+    <textarea id="scriptEditor" rows="20" spellcheck="false" style="width:100%;margin-top:12px;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;box-sizing:border-box"></textarea>
+  </div>
+</div>
+
+<div class="card">
+  <h3>运行输出</h3>
+  <pre id="runOutput" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:360px;font-size:12px;margin:0">暂无。</pre>
+</div>
+
+<div class="card">
+  <h3>运行历史</h3>
+  <div id="runHistory"></div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+let currentPath=''; let currentContent='';
+const tree=document.getElementById('scriptTree');
+const editor=document.getElementById('scriptEditor');
+function showOutput(t){document.getElementById('runOutput').textContent=typeof t==='string'?t:JSON.stringify(t,null,2);}
+
+async function loadScripts(){
+  const resp=await fetch('/api/metadata/scripts/');
+  const data=await resp.json();
+  if(data.code!==0){showOutput(data.message);return;}
+  tree.innerHTML='';
+  const groups={};
+  (data.data.scripts||[]).forEach(s=>{ (groups[s.dir]=groups[s.dir]||[]).push(s); });
+  Object.keys(groups).sort().forEach(dir=>{
+    const head=document.createElement('div');
+    head.style.cssText='font-weight:700;margin:8px 0 4px';
+    head.textContent='📁 '+dir+'/';
+    tree.appendChild(head);
+    groups[dir].sort((a,b)=>a.name.localeCompare(b.name)).forEach(s=>{
+      const row=document.createElement('div');
+      row.style.cssText='padding:3px 8px;border-radius:6px;cursor:pointer;display:flex;justify-content:space-between;gap:8px';
+      row.onmouseover=()=>row.style.background='#f1f5f9';
+      row.onmouseout=()=>row.style.background='';
+      row.innerHTML='<span>'+(s.kind==='python'?'🐍 ':'🖥️ ')+s.name+'</span><span class="muted">'+(s.size>1024?Math.round(s.size/1024)+'KB':s.size+'B')+'</span>';
+      row.onclick=()=>openScript(s.path);
+      tree.appendChild(row);
+    });
+  });
+  loadRuns();
+}
+
+async function openScript(path){
+  currentPath=path;
+  document.getElementById('fileTitle').textContent=path;
+  const resp=await fetch('/api/metadata/scripts/file/?path='+encodeURIComponent(path));
+  const data=await resp.json();
+  if(data.code!==0){showOutput(data.message);return;}
+  currentContent=data.data.content;
+  editor.value=currentContent;
+  showOutput('已加载: '+path);
+}
+
+async function saveScript(){
+  if(!currentPath){alert('先选择或新建脚本');return;}
+  const resp=await fetch('/api/metadata/scripts/save/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:currentPath,content:editor.value})});
+  const data=await resp.json();
+  showOutput(data); loadScripts();
+}
+
+async function runScript(){
+  if(!currentPath){alert('先选择脚本');return;}
+  if(!confirm('确定运行 '+currentPath+' ?'))return;
+  const args=document.getElementById('runArgs').value.trim().split(/\s+/).filter(Boolean);
+  showOutput({message:'运行中...'});
+  const resp=await fetch('/api/metadata/scripts/run/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:currentPath,args:args,timeout:900})});
+  const data=await resp.json();
+  showOutput(data); loadRuns();
+}
+
+function openCreate(){
+  currentPath='';
+  document.getElementById('fileTitle').textContent='新建脚本(保存前需点新建确认目录)';
+  editor.value='#!/usr/bin/env python3\n"""新脚本"""\nprint("hello")\n';
+  const dirs=prompt('目录(tools/etl/flink_sql/doris_sql/hive_sql):','tools');
+  const name=prompt('文件名(含 .py/.sh):','my_script.py');
+  if(!dirs||!name)return;
+  currentPath=dirs+'/'+name;
+  document.getElementById('fileTitle').textContent='新建: '+currentPath;
+  createConfirm();
+}
+async function createConfirm(){
+  const resp=await fetch('/api/metadata/scripts/create/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({directory:currentPath.split('/')[0],name:currentPath.split('/')[1],content:editor.value})});
+  const data=await resp.json();
+  showOutput(data);
+  if(data.code===0){currentPath=data.data.path;loadScripts();openScript(currentPath);}
+}
+async function deleteScript(){
+  if(!currentPath||!confirm('确定删除 '+currentPath+' ?'))return;
+  const resp=await fetch('/api/metadata/scripts/delete/',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:currentPath})});
+  showOutput(await resp.json());
+  currentPath=''; editor.value=''; loadScripts();
+}
+async function loadRuns(){
+  const resp=await fetch('/api/metadata/scripts/runs/');
+  const data=await resp.json();
+  const box=document.getElementById('runHistory');
+  box.innerHTML='';
+  (data.data||[]).slice(0,10).forEach(r=>{
+    const row=document.createElement('div');
+    const color=r.status==='success'?'#166534':(r.status==='failed'?'#b91c1c':'#854d0e');
+    row.style.cssText='padding:4px 0;border-bottom:1px solid #f1f5f9;font-size:13px';
+    row.innerHTML='<span class="muted">'+String(r.started_at).replace('T',' ').slice(0,19)+'</span> '+
+      '<strong class="mono">'+r.script_path+'</strong> '+JSON.stringify(r.args||[])+
+      ' <span style="color:'+color+'">'+r.status+'</span> exit='+(r.exit_code==null?'-':r.exit_code)+' '+(r.duration_ms||0)+'ms';
+    box.appendChild(row);
+  });
+}
+
+loadScripts();
+</script>
+{% endblock %}
