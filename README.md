@@ -34,6 +34,7 @@ python manage.py runserver
 - `/datax/` — DataX 同步管理(MySQL -> Doris: 结构校验/生成 job/执行)
 - `/etl/` — ETL 管理(Kafka Debezium -> Doris: 配置/后台运行/日志)
 - `/flink-sql/` — Flink SQL 实时 CDC 作业文件查看
+- `/sources/` — 元数据源配置(MySQL/PG/Oracle/Hive/Doris/SQL Server/Kafka, JDBC)
 - `/databases/<id>/` — 某数据源下的表列表(支持按表名/注释搜索)
 - `/tables/<id>/` — 表详情: 字段/索引/约束
 

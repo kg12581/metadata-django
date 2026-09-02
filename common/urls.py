@@ -27,4 +27,10 @@ urlpatterns = [
     path("flink-sync/jobs/", views.flink_sync_jobs, name="flink-sync-jobs"),
     path("flink-sync/generate/", views.flink_sync_generate, name="flink-sync-generate"),
     path("flink-sync/apply/", views.flink_sync_apply, name="flink-sync-apply"),
+    path("sources/", views.source_list, name="source-list"),
+    path("sources/create/", views.source_create, name="source-create"),
+    path("sources/<int:pk>/update/", views.source_update, name="source-update"),
+    path("sources/<int:pk>/delete/", views.source_delete, name="source-delete"),
+    path("sources/<int:pk>/test/", views.source_test, name="source-test"),
+    path("sources/<int:pk>/sync/", views.source_sync_metadata, name="source-sync"),
 ]

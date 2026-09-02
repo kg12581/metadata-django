@@ -13,8 +13,8 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from .config import get_datax_config, get_database_config, get_doris_config
-from .models import MetadataDatabase, MetadataTable
-from .serializers import database_to_dict, table_to_dict
+from .models import MetadataDatabase, MetadataSourceConfig, MetadataTable, SourceType
+from .serializers import database_to_dict, source_config_to_dict, table_to_dict
 from .services.datax_sync import sync_table_data
 from .services.flink_sync import apply_job, check_all_jobs, generate_job
 from .services.schema_check import check_tables
@@ -767,3 +767,212 @@ def flink_sync_apply(request):
     except Exception as exc:
         return _fail(f"执行失败: {exc}", code=500, status=500)
     return _ok(result, message="变更流程执行完成")
+
+
+# ---------------------------------------------------------------- 元数据源配置
+
+JDBC_TEMPLATES = {
+    "mysql": "jdbc:mysql://{host}:{port}/{database}?useUnicode=true&characterEncoding=utf8",
+    "postgresql": "jdbc:postgresql://{host}:{port}/{database}",
+    "oracle": "jdbc:oracle:thin:@{host}:{port}:{database}",
+    "hive": "jdbc:hive2://{host}:{port}/{database}",
+    "doris": "jdbc:mysql://{host}:{port}/{database}",
+    "sqlserver": "jdbc:sqlserver://{host}:{port};databaseName={database}",
+    "kafka": "kafka://{host}:{port}",
+    "other": "",
+}
+
+DEFAULT_PORTS = {
+    "mysql": 3306,
+    "postgresql": 5432,
+    "oracle": 1521,
+    "hive": 10000,
+    "doris": 9030,
+    "sqlserver": 1433,
+    "kafka": 9092,
+}
+
+
+def _build_jdbc_url(db_type: str, host: str, port, database: str) -> str:
+    template = JDBC_TEMPLATES.get(db_type, "")
+    if not template:
+        return ""
+    return template.format(
+        host=host or "",
+        port=port or DEFAULT_PORTS.get(db_type, ""),
+        database=database or "",
+    )
+
+
+def _fill_source_from_payload(source, payload: dict, creating: bool = False) -> None:
+    if payload.get("name") not in (None, ""):
+        source.name = str(payload["name"]).strip()
+    if payload.get("db_type") in SourceType.values:
+        source.db_type = payload["db_type"]
+    if payload.get("host") is not None:
+        source.host = str(payload["host"]).strip()
+    if payload.get("port") not in (None, ""):
+        try:
+            source.port = int(payload["port"])
+        except (TypeError, ValueError):
+            raise ValueError("port 必须是数字")
+    if payload.get("database_name") is not None:
+        source.database_name = str(payload["database_name"]).strip()
+    if payload.get("schema_name") is not None:
+        source.schema_name = str(payload["schema_name"]).strip()
+    if payload.get("username") is not None:
+        source.username = str(payload["username"]).strip()
+    if payload.get("password") not in (None, ""):
+        source.password = str(payload["password"])
+    if payload.get("remark") is not None:
+        source.remark = str(payload["remark"]).strip()
+    if "enabled" in payload:
+        source.enabled = bool(payload["enabled"])
+    raw_jdbc = payload.get("jdbc_url")
+    if raw_jdbc not in (None, ""):
+        source.jdbc_url = str(raw_jdbc).strip()
+    elif creating or not source.jdbc_url:
+        source.jdbc_url = _build_jdbc_url(
+            source.db_type, source.host, source.port, source.database_name
+        )
+    if source.port in (None, 0, ""):
+        source.port = DEFAULT_PORTS.get(source.db_type)
+
+
+@require_GET
+def sources_page(request):
+    """前端页面: 元数据源配置。"""
+    return render(
+        request,
+        "common/sources.html",
+        {
+            "source_types": SourceType.choices,
+            "jdbc_templates": JDBC_TEMPLATES,
+            "default_ports": DEFAULT_PORTS,
+        },
+    )
+
+
+@require_GET
+def source_list(request):
+    sources = MetadataSourceConfig.objects.all()
+    return _ok([source_config_to_dict(s) for s in sources])
+
+
+@csrf_exempt
+@require_POST
+def source_create(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    name = str(payload.get("name") or "").strip()
+    if not name:
+        return _fail("name 不能为空", code=400, status=400)
+    if MetadataSourceConfig.objects.filter(name=name).exists():
+        return _fail(f"名称已存在: {name}", code=400, status=400)
+    source = MetadataSourceConfig(name=name)
+    try:
+        _fill_source_from_payload(source, payload, creating=True)
+    except ValueError as exc:
+        return _fail(str(exc), code=400, status=400)
+    source.save()
+    return _ok(source_config_to_dict(source), message="配置已创建")
+
+
+@csrf_exempt
+@require_POST
+def source_update(request, pk):
+    source = get_object_or_404(MetadataSourceConfig, pk=pk)
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    if payload.get("name") and MetadataSourceConfig.objects.filter(
+        name=str(payload["name"]).strip()
+    ).exclude(pk=source.pk).exists():
+        return _fail(f"名称已存在: {payload['name']}", code=400, status=400)
+    try:
+        _fill_source_from_payload(source, payload)
+    except ValueError as exc:
+        return _fail(str(exc), code=400, status=400)
+    source.save()
+    return _ok(source_config_to_dict(source), message="配置已更新")
+
+
+@csrf_exempt
+@require_POST
+def source_delete(request, pk):
+    source = get_object_or_404(MetadataSourceConfig, pk=pk)
+    source.delete()
+    return _ok({"id": pk}, message="配置已删除")
+
+
+@csrf_exempt
+@require_POST
+def source_test(request, pk):
+    """测试连接: mysql/postgres/doris 真连, 其余做 TCP 探测。"""
+    source = get_object_or_404(MetadataSourceConfig, pk=pk)
+    host = source.host or ""
+    port = source.port or DEFAULT_PORTS.get(source.db_type)
+    if not host:
+        return _fail("未配置 host, 无法测试", code=400, status=400)
+    try:
+        if source.db_type in ("mysql", "doris"):
+            import pymysql
+            conn = pymysql.connect(
+                host=host,
+                port=port or 3306,
+                user=source.username or "",
+                password=source.password,
+                database=source.database_name or None,
+                connect_timeout=5,
+            )
+            conn.close()
+            return _ok({"ok": True}, message="连接成功")
+        if source.db_type == "postgresql":
+            import psycopg2
+            conn = psycopg2.connect(
+                host=host,
+                port=port or 5432,
+                dbname=source.database_name or "postgres",
+                user=source.username or "",
+                password=source.password,
+                connect_timeout=5,
+            )
+            conn.close()
+            return _ok({"ok": True}, message="连接成功")
+        # 其余类型: TCP 连通性 + 提示
+        import socket
+        with socket.create_connection((host, port or 0), timeout=5):
+            return _ok(
+                {"ok": True, "tcp_only": True},
+                message=f"TCP 可达; {source.get_db_type_display()} 的 JDBC 驱动测试请在本机安装对应驱动",
+            )
+    except Exception as exc:
+        return _fail(f"连接失败: {exc}", code=500, status=500)
+
+
+@csrf_exempt
+@require_POST
+def source_sync_metadata(request, pk):
+    """用配置的连接信息同步元数据(支持 mysql / postgresql)。"""
+    source = get_object_or_404(MetadataSourceConfig, pk=pk)
+    if source.db_type not in ("mysql", "postgresql"):
+        return _fail(f"{source.db_type} 暂不支持元数据自动同步", code=400, status=400)
+    config = {
+        "db_type": source.db_type,
+        "host": source.host,
+        "port": source.port or DEFAULT_PORTS.get(source.db_type),
+        "user": source.username,
+        "password": source.password,
+        "database": source.database_name,
+        "schema": source.schema_name or None,
+        "name": source.name,
+    }
+    try:
+        database, stats = sync_metadata(config)
+    except Exception as exc:
+        return _fail(f"同步失败: {exc}", code=500, status=500)
+    return _ok(
+        {"database": database_to_dict(database), "stats": stats},
+        message=f"同步完成: 表 {stats['tables']}, 字段 {stats['columns']}",
+    )

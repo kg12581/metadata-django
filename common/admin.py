@@ -5,6 +5,7 @@ from .models import (
     MetadataConstraint,
     MetadataDatabase,
     MetadataIndex,
+    MetadataSourceConfig,
     MetadataTable,
 )
 
@@ -47,3 +48,10 @@ class MetadataIndexAdmin(admin.ModelAdmin):
 class MetadataConstraintAdmin(admin.ModelAdmin):
     list_display = ("table", "name", "constraint_type", "column_names", "referenced_table")
     list_filter = ("constraint_type",)
+
+
+@admin.register(MetadataSourceConfig)
+class MetadataSourceConfigAdmin(admin.ModelAdmin):
+    list_display = ("name", "db_type", "host", "port", "database_name", "username", "enabled", "updated_at")
+    list_filter = ("db_type", "enabled")
+    search_fields = ("name", "host", "database_name", "jdbc_url")

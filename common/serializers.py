@@ -83,3 +83,23 @@ def database_to_dict(
     if include_tables:
         data["tables"] = [table_to_dict(t) for t in database.tables.all()]
     return data
+
+
+def source_config_to_dict(source) -> dict:
+    """序列化元数据源配置, 密码只返回是否已设置。"""
+    return {
+        "id": source.id,
+        "name": source.name,
+        "db_type": source.db_type,
+        "jdbc_url": source.jdbc_url,
+        "host": source.host,
+        "port": source.port,
+        "database_name": source.database_name,
+        "schema_name": source.schema_name,
+        "username": source.username,
+        "password_set": bool(source.password),
+        "remark": source.remark,
+        "enabled": source.enabled,
+        "created_at": source.created_at.isoformat(),
+        "updated_at": source.updated_at.isoformat(),
+    }

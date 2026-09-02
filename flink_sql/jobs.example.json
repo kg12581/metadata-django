@@ -1,0 +1,60 @@
+{
+  "flink_rest": "http://192.168.3.100:8081",
+  "flink_cli_bin": "/opt/flink/bin",
+  "flink_cli_prefix": "",
+  "savepoint_dir": "file:///data/flink/savepoint",
+  "checkpoint_dir": "file:///data/flink/checkpoint",
+  "jobs": [
+    {
+      "name": "pg-debezium-kafka-to-doris",
+      "pipeline_name": "pg-debezium-kafka-to-doris",
+      "sql_file": "postgresql_debezium_kafka2doris.sql",
+      "generated_file": "generated/postgresql_debezium_kafka2doris_runtime.sql",
+      "source_type": "postgresql_debezium",
+      "source_db": {
+        "db_type": "postgresql",
+        "host": "192.168.3.100",
+        "port": 5432,
+        "user": "debezium",
+        "password": "CHANGE_ME",
+        "database": "cdc_demo",
+        "schema": "public"
+      },
+      "source_table": "orders",
+      "kafka_topic": "cdcpg.public.orders",
+      "kafka_bootstrap_servers": "192.168.3.100:9092",
+      "doris_host": "192.168.3.100",
+      "doris_fe_http_port": 8030,
+      "doris_user": "root",
+      "doris_password": "",
+      "doris_database": "test_db",
+      "doris_table": "orders",
+      "primary_keys": ["id"]
+    },
+    {
+      "name": "mysql-canal-kafka-to-doris",
+      "pipeline_name": "mysql-canal-kafka-to-doris",
+      "sql_file": "mysql_canal_kafka2doris.sql",
+      "generated_file": "generated/mysql_canal_kafka2doris_runtime.sql",
+      "source_type": "mysql_canal",
+      "source_db": {
+        "db_type": "mysql",
+        "host": "192.168.3.100",
+        "port": 3306,
+        "user": "root",
+        "password": "CHANGE_ME",
+        "database": "test_db"
+      },
+      "source_table": "users",
+      "kafka_topic": "mysql_canal.users",
+      "kafka_bootstrap_servers": "192.168.3.100:9092",
+      "doris_host": "192.168.3.100",
+      "doris_fe_http_port": 8030,
+      "doris_user": "root",
+      "doris_password": "",
+      "doris_database": "test_db",
+      "doris_table": "users",
+      "primary_keys": ["id"]
+    }
+  ]
+}

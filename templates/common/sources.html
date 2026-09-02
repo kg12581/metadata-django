@@ -1,0 +1,239 @@
+{% extends "common/base.html" %}
+{% block title %}数据源配置 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div>
+      <h2 style="margin:0 0 4px">元数据源配置</h2>
+      <div class="muted">配置 MySQL / PostgreSQL / Oracle / Hive / Doris / SQL Server / Kafka 等数据源连接信息(JDBC)</div>
+    </div>
+    <button class="btn" onclick="openForm(null)">新增配置</button>
+  </div>
+</div>
+
+<div class="card" id="formCard" style="display:none">
+  <h3 id="formTitle">新增配置</h3>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;max-width:1100px">
+    <div>
+      <label class="muted">名称 *</label>
+      <input type="text" id="fName" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">类型 *</label>
+      <select id="fType" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+        {% for value, label in source_types %}
+        <option value="{{ value }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="muted">主机</label>
+      <input type="text" id="fHost" placeholder="192.168.3.100" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">端口</label>
+      <input type="number" id="fPort" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">数据库 / 服务名</label>
+      <input type="text" id="fDatabase" placeholder="test_db" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">Schema</label>
+      <input type="text" id="fSchema" placeholder="public(可选)" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">用户名</label>
+      <input type="text" id="fUser" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+    <div>
+      <label class="muted">密码</label>
+      <input type="password" id="fPassword" placeholder="留空则不修改" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+    </div>
+  </div>
+  <div style="margin-top:14px;max-width:1100px">
+    <label class="muted">JDBC URL(自动生成, 可手动修改)</label>
+    <input type="text" id="fJdbc" placeholder="jdbc:mysql://host:3306/db" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:ui-monospace,Menlo,Consolas,monospace">
+  </div>
+  <div style="margin-top:14px;max-width:1100px">
+    <label class="muted">备注</label>
+    <input type="text" id="fRemark" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+  </div>
+  <div style="margin-top:14px;display:flex;gap:16px;align-items:center">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+      <input type="checkbox" id="fEnabled" checked> 启用
+    </label>
+    <div style="display:flex;gap:8px">
+      <button class="btn" onclick="saveForm()">保存</button>
+      <button class="btn ghost" onclick="document.getElementById('formCard').style.display='none'">取消</button>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <h3 style="margin:0">配置列表</h3>
+    <button class="btn ghost" onclick="loadSources()">刷新</button>
+  </div>
+  <div id="sourceList"></div>
+</div>
+
+<div class="card">
+  <h3>结果</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:360px;font-size:12px;margin:0">暂无数据。</pre>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const JDBC = {
+{% for key, value in jdbc_templates.items %}
+  '{{ key }}': '{{ value|escapejs }}',
+{% endfor %}
+};
+const PORTS = {
+{% for key, value in default_ports.items %}
+  '{{ key }}': {{ value }},
+{% endfor %}
+};
+let editId = null;
+
+function showResult(text) {
+  document.getElementById('resultArea').textContent = typeof text === 'string' ? text : JSON.stringify(text, null, 2);
+}
+
+function buildJdbc() {
+  const t = document.getElementById('fType').value;
+  const tmpl = JDBC[t] || '';
+  if (!tmpl) return '';
+  const host = document.getElementById('fHost').value || '{host}';
+  const port = document.getElementById('fPort').value || PORTS[t] || '';
+  const db = document.getElementById('fDatabase').value || '{database}';
+  return tmpl.replace('{host}', host).replace('{port}', port).replace('{database}', db);
+}
+
+document.getElementById('fType').addEventListener('change', () => {
+  const t = document.getElementById('fType').value;
+  if (!document.getElementById('fPort').value) document.getElementById('fPort').value = PORTS[t] || '';
+  document.getElementById('fJdbc').value = buildJdbc();
+});
+['fHost', 'fPort', 'fDatabase'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById('fJdbc').value = buildJdbc();
+  });
+});
+
+function openForm(source) {
+  editId = source ? source.id : null;
+  document.getElementById('formTitle').textContent = source ? '编辑: ' + source.name : '新增配置';
+  document.getElementById('fName').value = source ? source.name : '';
+  document.getElementById('fType').value = source ? source.db_type : 'mysql';
+  document.getElementById('fHost').value = source ? (source.host || '') : '';
+  document.getElementById('fPort').value = source ? (source.port || PORTS[source.db_type] || '') : (PORTS.mysql || '');
+  document.getElementById('fDatabase').value = source ? (source.database_name || '') : '';
+  document.getElementById('fSchema').value = source ? (source.schema_name || '') : '';
+  document.getElementById('fUser').value = source ? (source.username || '') : '';
+  document.getElementById('fPassword').value = '';
+  document.getElementById('fJdbc').value = source ? (source.jdbc_url || buildJdbc()) : buildJdbc();
+  document.getElementById('fRemark').value = source ? (source.remark || '') : '';
+  document.getElementById('fEnabled').checked = source ? source.enabled : true;
+  document.getElementById('formCard').style.display = 'block';
+}
+
+async function saveForm() {
+  const payload = {
+    name: document.getElementById('fName').value.trim(),
+    db_type: document.getElementById('fType').value,
+    host: document.getElementById('fHost').value.trim(),
+    port: document.getElementById('fPort').value,
+    database_name: document.getElementById('fDatabase').value.trim(),
+    schema_name: document.getElementById('fSchema').value.trim(),
+    username: document.getElementById('fUser').value.trim(),
+    password: document.getElementById('fPassword').value,
+    jdbc_url: document.getElementById('fJdbc').value.trim(),
+    remark: document.getElementById('fRemark').value.trim(),
+    enabled: document.getElementById('fEnabled').checked
+  };
+  const url = editId ? '/api/metadata/sources/' + editId + '/update/' : '/api/metadata/sources/create/';
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+  const data = await resp.json();
+  showResult(data);
+  if (data.code === 0) {
+    document.getElementById('formCard').style.display = 'none';
+    loadSources();
+  }
+}
+
+async function loadSources() {
+  const resp = await fetch('/api/metadata/sources/');
+  const data = await resp.json();
+  const list = document.getElementById('sourceList');
+  list.innerHTML = '';
+  const sources = data.data || [];
+  if (!sources.length) {
+    list.textContent = '暂无配置, 点击右上角「新增配置」。';
+    return;
+  }
+  const table = document.createElement('table');
+  table.innerHTML = '<thead><tr><th>名称</th><th>类型</th><th>主机:端口</th><th>库/Schema</th><th>用户</th><th>JDBC URL</th><th>状态</th><th>操作</th></tr></thead>';
+  const tbody = document.createElement('tbody');
+  sources.forEach(s => {
+    const tr = document.createElement('tr');
+    const status = s.enabled ? '<span class="badge synced">启用</span>' : '<span class="badge pending">停用</span>';
+    tr.innerHTML =
+      '<td><strong>' + s.name + '</strong></td>' +
+      '<td>' + s.db_type + '</td>' +
+      '<td class="mono">' + (s.host ? s.host + ':' + (s.port || '-') : '-') + '</td>' +
+      '<td class="mono">' + (s.database_name || '-') + (s.schema_name ? ' / ' + s.schema_name : '') + '</td>' +
+      '<td>' + (s.username || '-') + (s.password_set ? ' *' : '') + '</td>' +
+      '<td class="muted" style="max-width:260px;word-break:break-all">' + (s.jdbc_url || '-') + '</td>' +
+      '<td>' + status + '</td>' +
+      '<td style="white-space:nowrap">' +
+        '<a href="#" onclick="openForm(' + JSON.stringify(s).replace(/"/g, '&quot;') + ');return false">编辑</a> | ' +
+        '<a href="#" onclick="testSource(' + s.id + ');return false">测试</a> | ' +
+        '<a href="#" onclick="syncSource(' + s.id + ');return false">同步</a> | ' +
+        '<a href="#" style="color:#b91c1c" onclick="deleteSource(' + s.id + ');return false">删除</a>' +
+      '</td>';
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  list.appendChild(table);
+}
+
+async function apiPost(url, payload) {
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload || {})
+  });
+  return resp.json();
+}
+
+async function testSource(id) {
+  showResult({ message: '测试中...' });
+  const data = await apiPost('/api/metadata/sources/' + id + '/test/');
+  showResult(data);
+}
+
+async function syncSource(id) {
+  if (!confirm('用该配置同步元数据到本地表(mysql/pg 支持)？')) return;
+  showResult({ message: '同步中...' });
+  const data = await apiPost('/api/metadata/sources/' + id + '/sync/');
+  showResult(data);
+  loadSources();
+}
+
+async function deleteSource(id) {
+  if (!confirm('确定删除该配置？')) return;
+  const data = await apiPost('/api/metadata/sources/' + id + '/delete/');
+  showResult(data);
+  loadSources();
+}
+
+loadSources();
+</script>
+{% endblock %}

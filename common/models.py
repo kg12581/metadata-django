@@ -12,6 +12,17 @@ class SyncStatus(models.TextChoices):
     ERROR = "error", "同步失败"
 
 
+class SourceType(models.TextChoices):
+    MYSQL = "mysql", "MySQL"
+    POSTGRESQL = "postgresql", "PostgreSQL"
+    ORACLE = "oracle", "Oracle"
+    HIVE = "hive", "Hive"
+    DORIS = "doris", "Doris"
+    SQLSERVER = "sqlserver", "SQL Server"
+    KAFKA = "kafka", "Kafka"
+    OTHER = "other", "其他"
+
+
 class MetadataDatabase(models.Model):
     """一个被采集的远端数据库(数据源)。"""
 
@@ -51,6 +62,37 @@ class MetadataDatabase(models.Model):
 
     def __str__(self):
         return f"{self.db_type}://{self.host}:{self.port}/{self.database_name}"
+
+
+class MetadataSourceConfig(models.Model):
+    """可配置的元数据源(JDBC/连接信息), 用于维护 mysql/pg/oracle/hive/doris 等。"""
+
+    name = models.CharField("名称", max_length=200, unique=True)
+    db_type = models.CharField(
+        "类型",
+        max_length=50,
+        choices=SourceType.choices,
+        default=SourceType.MYSQL,
+    )
+    jdbc_url = models.CharField("JDBC URL", max_length=1000, blank=True, default="")
+    host = models.CharField("主机", max_length=255, blank=True, default="")
+    port = models.PositiveIntegerField("端口", null=True, blank=True)
+    database_name = models.CharField("数据库/服务名", max_length=200, blank=True, default="")
+    schema_name = models.CharField("Schema", max_length=200, blank=True, default="")
+    username = models.CharField("用户名", max_length=200, blank=True, default="")
+    password = models.CharField("密码", max_length=500, blank=True, default="")
+    remark = models.TextField("备注", blank=True, default="")
+    enabled = models.BooleanField("启用", default=True)
+    created_at = models.DateTimeField("创建时间", auto_now_add=True)
+    updated_at = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        ordering = ["db_type", "name"]
+        verbose_name = "元数据源配置"
+        verbose_name_plural = "元数据源配置"
+
+    def __str__(self):
+        return f"[{self.db_type}] {self.name}"
 
 
 class MetadataTable(models.Model):

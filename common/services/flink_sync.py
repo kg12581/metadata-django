@@ -218,7 +218,8 @@ def generate_runtime_sql(job: dict, columns: list[dict]) -> str:
         m = mapping[column["name"]]
         if m["transform"]:
             expression, alias = m["transform"]
-            select_parts.append(f"    {expression % f'`{column['name']}`'} AS `{alias}`")
+            col_ref = "`" + column["name"] + "`"
+            select_parts.append("    " + (expression % col_ref) + f" AS `{alias}`")
         else:
             select_parts.append(f"    `{column['name']}`")
     lines.append(f"INSERT INTO {sink_table}")
