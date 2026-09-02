@@ -1,0 +1,111 @@
+{% extends "common/base.html" %}
+{% block title %}Oracle 转 Hive SQL - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0 0 4px">Oracle 存储过程 → Hive SQL</h2>
+  <div class="muted">粘贴 PL/SQL 存储过程/函数/匿名块, 由 AI 转换为等价 Hive SQL(需配置 LLM_API_KEY, 默认 DeepSeek)</div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:8px;justify-content:flex-start;gap:12px">
+    <div>
+      <label class="muted">数据源表(可选, 提供字段上下文)</label>
+      <select id="dbSelect" onchange="loadTables()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-left:8px">
+        <option value="">不关联</option>
+      </select>
+      <select id="tableSelect" onchange="loadTableMeta()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-left:4px">
+        <option value="">(选数据源)</option>
+      </select>
+    </div>
+    <button class="btn ghost" onclick="loadSample()">填入示例过程</button>
+  </div>
+  <textarea id="codeBox" rows="14" spellcheck="false" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;box-sizing:border-box"></textarea>
+  <div id="metaHint" class="muted" style="margin:8px 0"></div>
+  <div style="margin-top:10px;display:flex;gap:8px">
+    <button class="btn" onclick="convert()">AI 生成 Hive SQL</button>
+    <button class="btn ghost" onclick="copyResult()">复制结果</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>AI 输出</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:560px;font-size:13px;margin:0;white-space:pre-wrap">暂无输出。</pre>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const SAMPLE = `CREATE OR REPLACE PROCEDURE p_daily_sales_summary(p_biz_date VARCHAR2) IS
+    CURSOR cur_orders IS
+        SELECT o.product_id, p.product_name,
+               SUM(o.quantity)   AS total_qty,
+               SUM(o.amount)     AS total_amount,
+               COUNT(*)          AS order_cnt
+        FROM ods_orders o
+        JOIN dim_product p ON p.product_id = o.product_id
+        WHERE o.biz_date = p_biz_date
+        GROUP BY o.product_id, p.product_name;
+BEGIN
+    -- 清空结果表
+    DELETE FROM dws_daily_product_sales WHERE biz_date = p_biz_date;
+
+    FOR rec IN cur_orders LOOP
+        INSERT INTO dws_daily_product_sales
+            (biz_date, product_id, product_name, total_qty, total_amount, order_cnt)
+        VALUES
+            (p_biz_date, rec.product_id, rec.product_name,
+             rec.total_qty, rec.total_amount, rec.order_cnt);
+    END LOOP;
+    COMMIT;
+END p_daily_sales_summary;
+/`;
+let currentTableId='';
+
+async function loadOptions(){
+  const resp=await fetch('/api/metadata/sql-helper/options/');
+  const data=await resp.json();
+  const sel=document.getElementById('dbSelect');
+  (data.data||[]).forEach(db=>{
+    const o=document.createElement('option'); o.value=db.id;
+    o.textContent='['+db.db_type+'] '+db.database_name; sel.appendChild(o);
+  });
+}
+async function loadTables(){
+  const sel=document.getElementById('tableSelect');
+  sel.innerHTML='<option value="">(选数据源)</option>';
+  const dbId=document.getElementById('dbSelect').value;
+  if(!dbId)return;
+  const resp=await fetch('/api/metadata/sql-helper/tables/?db_id='+dbId);
+  const data=await resp.json();
+  (data.data||[]).slice(0,500).forEach(t=>{
+    const o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o);
+  });
+}
+async function loadTableMeta(){
+  currentTableId=document.getElementById('tableSelect').value;
+  const hint=document.getElementById('metaHint');
+  if(!currentTableId){hint.textContent='';return;}
+  const resp=await fetch('/api/metadata/sql-helper/table/'+currentTableId+'/');
+  const data=await resp.json();
+  const info=data.data;
+  hint.textContent='已关联元数据: '+info.database.database_name+'.'+info.table.name+' ('+info.columns.length+' 字段) — 作为上下文提供给 AI';
+}
+function loadSample(){ document.getElementById('codeBox').value=SAMPLE; }
+async function convert(){
+  const code=document.getElementById('codeBox').value.trim();
+  if(!code){alert('请先粘贴 Oracle 存储过程');return;}
+  const area=document.getElementById('resultArea');
+  area.textContent='AI 转换中...';
+  const resp=await fetch('/api/metadata/llm/oracle-to-hive/',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code:code, table_id:currentTableId||null})
+  });
+  const data=await resp.json();
+  area.textContent=data.code===0?data.data.result:data.message;
+}
+async function copyResult(){
+  const text=document.getElementById('resultArea').textContent;
+  if(text&&text!=='暂无输出。')await navigator.clipboard.writeText(text);
+}
+loadOptions();
+</script>
+{% endblock %}

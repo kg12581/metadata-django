@@ -1422,6 +1422,51 @@ def llm_spark_to_hive(request):
     return _ok({"language": language, "result": text}, message="AI 转换完成")
 
 
+@require_GET
+def oracle_to_hive_page(request):
+    """前端页面: Oracle 存储过程 -> Hive SQL。"""
+    return render(request, "common/oracle_to_hive.html", {})
+
+
+@csrf_exempt
+@require_POST
+def llm_oracle_to_hive(request):
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    plsql = str(payload.get("code") or "").strip()
+    if not plsql:
+        return _fail("code 不能为空", code=400, status=400)
+
+    metadata = ""
+    if payload.get("table_id"):
+        table = (
+            MetadataTable.objects.filter(pk=payload["table_id"])
+            .select_related("database")
+            .first()
+        )
+        if table:
+            columns = [
+                f"{c.name} {c.column_type or c.data_type}"
+                + (f" 注释:{c.comment}" if c.comment else "")
+                for c in table.columns.all()
+            ]
+            metadata = (
+                f"表 {table.database.database_name}.{table.name} 注释:{table.comment}\n"
+                + "\n".join(columns)
+            )
+    elif payload.get("metadata"):
+        metadata = str(payload["metadata"])
+
+    try:
+        text = llm_service.oracle_proc_to_hive_sql(plsql, metadata)
+    except llm_service.LLMNotConfigured as exc:
+        return _fail(str(exc), code=400, status=400)
+    except Exception as exc:
+        return _fail(f"AI 调用失败: {exc}", code=500, status=500)
+    return _ok({"result": text}, message="AI 转换完成")
+
+
 # ---------------------------------------------------------------- 运营看板
 
 @require_GET

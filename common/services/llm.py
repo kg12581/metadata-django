@@ -110,3 +110,26 @@ def spark_to_hive_sql(code: str, language: str, metadata: str = "") -> str:
         f"可参考的表结构元数据:\n{metadata or '(未提供)'}"
     )
     return chat(prompt, system=system, max_tokens=2500)
+
+
+def oracle_proc_to_hive_sql(plsql: str, metadata: str = "") -> str:
+    """AI 把 Oracle 存储过程(PL/SQL)转换为等价 Hive SQL 脚本。
+
+    不写死解析规则: 完整过程交由 LLM 理解并生成 Hive 可执行 SQL。
+    """
+    system = (
+        "你是一名精通 Oracle(PL/SQL)与 Hive SQL 的大数据工程师。"
+        "用户会粘贴一段 Oracle 存储过程/匿名块/函数。请转换为等价的 Hive SQL 脚本: "
+        "1) 先用 2-3 句中文说明该过程做什么; "
+        "2) 再输出 Hive 可直接执行的 SQL 序列(放 ```sql 代码块中), 逐条以分号分隔; "
+        "3) 转换约定: 临时表/中间结果用 CREATE TABLE ... AS SELECT 或 INSERT OVERWRITE 表达; "
+        "   过程参数/变量在 SQL 头注释中说明如何用参数替换; "
+        "   循环/游标/逐行处理尽量改成一条集合 SQL(INSERT ... SELECT); "
+        "4) 若存在 Hive 无法表达的 PL/SQL 特性(动态 SQL、自治事务等), 明确标注无法等价实现; "
+        "5) 不要臆造表结构, 依据代码中的表名/列名生成, 必要时说明假设。"
+    )
+    prompt = (
+        f"Oracle 存储过程代码:\n```sql\n{plsql}\n```\n\n"
+        f"可参考的表结构元数据:\n{metadata or '(未提供)'}"
+    )
+    return chat(prompt, system=system, max_tokens=3000)

@@ -102,6 +102,7 @@ curl -X POST http://127.0.0.1:8000/api/metadata/reconcile/tasks/1/run/
 | POST | `/llm/analyze/` | AI 分析 SQL/元数据(需 LLM_API_KEY) |
 | POST | `/llm/sql-assist/` | AI 辅助写 SQL(generate/optimize/explain, 可带 table_id) |
 | POST | `/llm/spark-to-hive/` | AI 把 Spark 代码(Java/Scala/Python)转为 Hive SQL |
+| POST | `/llm/oracle-to-hive/` | AI 把 Oracle 存储过程(PL/SQL)转为 Hive SQL |
 | GET | `/docs/` / `/docs/file/?name=` | 文档列表/内容(HTML) |
 | GET | `/ops/summary/?days=7` | 运营看板汇总 |
 

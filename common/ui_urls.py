@@ -15,6 +15,7 @@ urlpatterns = [
     path("sql-helper/", views.sql_helper_page, name="sql-helper-page"),
     path("ai-sql/", views.ai_sql_page, name="ai-sql-page"),
     path("spark2sql/", views.spark_to_hive_page, name="spark-to-hive-page"),
+    path("oracle2hive/", views.oracle_to_hive_page, name="oracle-to-hive-page"),
     path("scheduler/", views.scheduler_page, name="scheduler-page"),
     path("reconcile/", views.reconcile_page, name="reconcile-page"),
     path("docs/", views.docs_page, name="docs-page"),
