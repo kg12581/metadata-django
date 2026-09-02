@@ -16,13 +16,14 @@ def _env(name: str, default: str = "") -> str:
 
 
 def chat(prompt: str, system: str | None = None, max_tokens: int = 1500) -> str:
-    api_key = _env("LLM_API_KEY")
+    api_key = _env("LLM_API_KEY") or _env("DEEPSEEK_API_KEY")
     if not api_key:
         raise LLMNotConfigured(
-            "未配置 LLM_API_KEY; 可设置 LLM_BASE_URL / LLM_MODEL 指向任意 OpenAI 兼容服务"
+            "未配置 LLM_API_KEY / DEEPSEEK_API_KEY; 默认对接 DeepSeek, "
+            "可在 .env 设置 LLM_BASE_URL / LLM_MODEL 指向任意 OpenAI 兼容服务"
         )
-    base_url = _env("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
-    model = _env("LLM_MODEL", "gpt-4o-mini")
+    base_url = _env("LLM_BASE_URL", "https://api.deepseek.com/v1").rstrip("/")
+    model = _env("LLM_MODEL", "deepseek-chat")
     messages = []
     if system:
         messages.append({"role": "system", "content": system})

@@ -137,7 +137,8 @@ curl -X POST http://127.0.0.1:8000/api/metadata/llm/analyze/ \
 
 | 变量 | 作用 |
 | --- | --- |
-| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | AI 分析 |
+| `LLM_API_KEY` (或 `DEEPSEEK_API_KEY`) | DeepSeek API Key(默认; 申请: https://platform.deepseek.com/) |
+| `LLM_BASE_URL` / `LLM_MODEL` | 默认 `https://api.deepseek.com/v1` / `deepseek-chat`, 可指向任意 OpenAI 兼容服务 |
 | `SQL_FILE_HOST` / `SQL_FILE_USER` / `SQL_FILE_PASSWORD` / `SQL_FILE_KEY` / `SQL_FILE_DIR` | SQL 文件库远程模式 |
 | `RECONCILE_WEBHOOK` | 对账告警 webhook |
 | `DATAX_HOME` | DataX 执行 |
