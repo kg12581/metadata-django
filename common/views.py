@@ -792,6 +792,9 @@ JDBC_TEMPLATES = {
     "oceanbase": "jdbc:oceanbase://{host}:{port}/{database}",
     "gaussdb": "jdbc:postgresql://{host}:{port}/{database}",
     "dws": "jdbc:postgresql://{host}:{port}/{database}",
+    "opengauss": "jdbc:postgresql://{host}:{port}/{database}",
+    "db2": "jdbc:db2://{host}:{port}/{database}",
+    "clickhouse": "jdbc:clickhouse://{host}:{port}/{database}",
     "other": "",
 }
 
@@ -807,10 +810,13 @@ DEFAULT_PORTS = {
     "oceanbase": 2881,
     "gaussdb": 5432,
     "dws": 8000,
+    "opengauss": 5432,
+    "db2": 50000,
+    "clickhouse": 8123,
 }
 
 MYSQL_LIKE_TYPES = {"mysql", "oceanbase"}
-POSTGRES_LIKE_TYPES = {"postgresql", "gaussdb", "dws"}
+POSTGRES_LIKE_TYPES = {"postgresql", "gaussdb", "dws", "opengauss"}
 
 
 def _build_jdbc_url(db_type: str, host: str, port, database: str) -> str:
@@ -982,6 +988,29 @@ def source_test(request, pk):
             )
             conn.close()
             return _ok({"ok": True, "service": source.database_name}, message="Oracle 连接成功")
+        if source.db_type == "clickhouse":
+            import clickhouse_connect
+
+            client = clickhouse_connect.get_client(
+                host=host,
+                port=port or 8123,
+                username=source.username or "",
+                password=source.password,
+                connect_timeout=5,
+            )
+            client.query("SELECT 1")
+            return _ok({"ok": True, "database": source.database_name}, message="ClickHouse 连接成功")
+        if source.db_type == "db2":
+            import ibm_db
+
+            dsn = (
+                f"DATABASE={source.database_name or ''};HOSTNAME={host};"
+                f"PORT={port or 50000};UID={source.username or ''};"
+                f"PWD={source.password};PROTOCOL=TCPIP"
+            )
+            conn = ibm_db.connect(dsn, "", "")
+            ibm_db.close(conn)
+            return _ok({"ok": True, "database": source.database_name}, message="DB2 连接成功")
         # 其余类型: TCP 连通性 + 提示
         import socket
         with socket.create_connection((host, port or 0), timeout=5):
@@ -998,7 +1027,7 @@ def source_test(request, pk):
 def source_sync_metadata(request, pk):
     """用配置的连接信息同步元数据(mysql/oceanbase / pg/gaussdb/dws / odps)。"""
     source = get_object_or_404(MetadataSourceConfig, pk=pk)
-    if source.db_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"odps", "oracle"}:
+    if source.db_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"odps", "oracle", "clickhouse", "db2"}:
         return _fail(f"{source.db_type} 暂不支持元数据自动同步", code=400, status=400)
     if source.db_type == "odps":
         config = {

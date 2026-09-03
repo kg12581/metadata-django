@@ -10,6 +10,9 @@ class DatabaseType(models.TextChoices):
     OCEANBASE = "oceanbase", "OceanBase"
     GAUSSDB = "gaussdb", "GaussDB"
     DWS = "dws", "GaussDB(DWS)"
+    OPENGAUSS = "opengauss", "openGauss"
+    DB2 = "db2", "DB2"
+    CLICKHOUSE = "clickhouse", "ClickHouse"
     ODPS = "odps", "MaxCompute(ODPS)"
 
 
@@ -30,6 +33,9 @@ class SourceType(models.TextChoices):
     OCEANBASE = "oceanbase", "OceanBase"
     GAUSSDB = "gaussdb", "GaussDB"
     DWS = "dws", "GaussDB(DWS)"
+    OPENGAUSS = "opengauss", "openGauss"
+    DB2 = "db2", "DB2"
+    CLICKHOUSE = "clickhouse", "ClickHouse"
     ODPS = "odps", "MaxCompute(ODPS)"
     OTHER = "other", "其他"
 

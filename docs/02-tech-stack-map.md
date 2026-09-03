@@ -30,6 +30,7 @@
 | 离线数仓 | Hive | ⏳ `hive_sql/` 模板与 DDL 生成 | 部署 HiveServer2 后补 beeline 提交/执行脚本 |
 | 云数仓 | MaxCompute(ODPS) | ⏳ ODPS 读取器/配置已接入(需 endpoint+AK/SK+Project) | 用 pyodps 扩展同步、与 odps-jdbc 打通 |
 | 国产数据库 | OceanBase / GaussDB / GaussDB(DWS) | ✅ 协议兼容接入: OceanBase=MySQL 协议, GaussDB/DWS=PG 协议 | 生产环境实测与专属驱动优化 |
+| 其他分析型/商业库 | ClickHouse / DB2 / openGauss | ✅ 类型与读取器接入(openGauss=PG 协议, DB2 需 ibm_db 驱动) | 生产环境实测 |
 | 数据湖 | Iceberg / Paimon / Hudi | ❌ | 建议下一步: Flink + Paimon 湖仓一体(见 03 链接) |
 
 ## 4. 计算引擎

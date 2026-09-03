@@ -242,7 +242,7 @@
   <div class="toolbar" style="margin-bottom:0">
     <div>
       <h2 style="margin:0 0 4px">元数据源配置</h2>
-      <div class="muted">配置 MySQL / PostgreSQL / Oracle / Hive / Doris / SQL Server / Kafka / ODPS / OceanBase / GaussDB / DWS 等数据源连接信息(JDBC)</div>
+      <div class="muted">配置 MySQL / PostgreSQL / Oracle / Hive / Doris / ClickHouse / DB2 / ODPS / OceanBase / GaussDB / DWS / openGauss 等数据源连接信息(JDBC)</div>
     </div>
     <button class="btn" onclick="openForm(null)">新增配置</button>
   </div>
@@ -278,6 +278,12 @@
         <option value="gaussdb">GaussDB</option>
         
         <option value="dws">GaussDB(DWS)</option>
+        
+        <option value="opengauss">openGauss</option>
+        
+        <option value="db2">DB2</option>
+        
+        <option value="clickhouse">ClickHouse</option>
         
         <option value="odps">MaxCompute(ODPS)</option>
         
@@ -369,6 +375,12 @@ const JDBC = {
 
   'dws': 'jdbc:postgresql://{host}:{port}/{database}',
 
+  'opengauss': 'jdbc:postgresql://{host}:{port}/{database}',
+
+  'db2': 'jdbc:db2://{host}:{port}/{database}',
+
+  'clickhouse': 'jdbc:clickhouse://{host}:{port}/{database}',
+
   'other': '',
 
 };
@@ -395,6 +407,12 @@ const PORTS = {
   'gaussdb': 5432,
 
   'dws': 8000,
+
+  'opengauss': 5432,
+
+  'db2': 50000,
+
+  'clickhouse': 8123,
 
 };
 let editId = null;

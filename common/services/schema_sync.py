@@ -14,7 +14,7 @@ from ..readers.doris import DorisReader, quote_identifier
 from ..readers.mysql import MySQLReader
 _DATETIME_RE = re.compile(r"^datetime\((\d+)\)$", re.IGNORECASE)
 
-POSTGRES_LIKE_TYPES = {"postgresql", "gaussdb", "dws"}
+POSTGRES_LIKE_TYPES = {"postgresql", "gaussdb", "dws", "opengauss"}
 
 
 def map_mysql_type_to_doris(column: dict) -> str:

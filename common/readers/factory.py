@@ -1,4 +1,6 @@
 from .base import MetadataReader
+from .clickhouse import ClickHouseReader
+from .db2 import DB2Reader
 from .mysql import MySQLReader
 from .odps import ODPSReader
 from .oracle import OracleReader
@@ -9,10 +11,13 @@ READERS: dict[str, type[MetadataReader]] = {
     MySQLReader.DB_TYPE: MySQLReader,
     ODPSReader.DB_TYPE: ODPSReader,
     OracleReader.DB_TYPE: OracleReader,
+    ClickHouseReader.DB_TYPE: ClickHouseReader,
+    DB2Reader.DB_TYPE: DB2Reader,
     # 国产数据库协议兼容: OceanBase(MySQL 协议), GaussDB/DWS(PostgreSQL 协议)
     "oceanbase": MySQLReader,
     "gaussdb": PostgreSQLReader,
     "dws": PostgreSQLReader,
+    "opengauss": PostgreSQLReader,
 }
 
 

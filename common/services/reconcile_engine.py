@@ -23,7 +23,7 @@ def source_connection(source_config, database: str) -> dict | None:
         1521
         if db_type == "oracle"
         else 5432
-        if db_type in ("postgresql", "gaussdb", "dws")
+        if db_type in ("postgresql", "gaussdb", "dws", "opengauss")
         else 3306
     )
     return {
@@ -281,7 +281,7 @@ def run_task(task: ReconcileTask, persist: bool = True) -> ReconcileRun:
             "mysql"
             if raw_source_type in ("mysql", "oceanbase")
             else "postgresql"
-            if raw_source_type in ("postgresql", "gaussdb", "dws")
+            if raw_source_type in ("postgresql", "gaussdb", "dws", "opengauss")
             else raw_source_type
         )
         src = source_connection(source_config, task.source_db_name)

@@ -49,6 +49,12 @@
 - OceanBase 官方文档: <https://www.oceanbase.com/docs>
 - 华为云 GaussDB: <https://www.huaweicloud.com/product/gaussdb.html>
 - 华为云 GaussDB(DWS) 数据仓库: <https://www.huaweicloud.com/product/dws.html>
+- openGauss 官方文档: <https://docs.opengauss.org/zh/>
+
+### 其他数据库
+
+- ClickHouse 官方文档: <https://clickhouse.com/docs>
+- IBM DB2 文档: <https://www.ibm.com/docs/en/db2>
 
 ### 编排 / 调度
 
