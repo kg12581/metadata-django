@@ -29,7 +29,7 @@ from .models import (
 )
 from .serializers import database_to_dict, source_config_to_dict, table_to_dict
 from .services.datax_sync import sync_table_data
-from .services.flink_sync import apply_job, check_all_jobs, generate_job
+from .services.flink_sync import apply_job, check_all_jobs, check_job_structure, generate_job
 from .services import docs as docs_service
 from .services import lineage as lineage_service
 from .services import llm as llm_service
@@ -37,7 +37,7 @@ from .services import sql_files as sql_files_service
 from .services import scripts as scripts_service
 from .services.reconcile_engine import run_task as run_reconcile_task
 from .services import scheduler as scheduler_service
-from .services.schema_check import check_tables
+from .services.schema_check import check_tables, compare_source_doris
 from .services.schema_sync import sync_table_schema
 from .services.sql_helper import build_snippets
 from .services.sync import sync_metadata
@@ -308,44 +308,61 @@ def export_database_excel(request, pk):
 @csrf_exempt
 @require_POST
 def datax_check(request):
-    """校验 MySQL 与 Doris 表结构是否一致, 返回 data.consistent = true/false。"""
+    """校验源端与 Doris 表结构是否一致, 返回 data.consistent = true/false。
+
+    请求体: {source_id 或 db_type/host/port/user/password/database/schema,
+    table|tables, doris_database}
+    """
     payload, err = _parse_json_body(request)
     if err:
         return _fail(err, code=400, status=400)
 
-    mysql_config = get_database_config(payload)
-    if mysql_config["db_type"] != "mysql":
-        return _fail("结构校验仅支持 MySQL 作为源库", code=400, status=400)
     tables, err = _tables_from_payload(payload)
     if err:
         return _fail(err, code=400, status=400)
+    context, message = _datax_source_context(payload)
+    if message:
+        return _fail(message, code=400, status=400)
+    source_config, source_type, database_name = context
 
     doris_config = get_doris_config(payload)
-    result = check_tables(
-        mysql_config,
-        doris_config,
-        mysql_config["database"],
-        tables,
-        doris_database=payload.get("doris_database"),
-    )
-    message = "表结构一致" if result["consistent"] else "存在表结构差异"
-    return _ok(result, message=message)
+    results = {}
+    for table in tables:
+        results[table] = compare_source_doris(
+            source_type,
+            source_config,
+            database_name,
+            table,
+            doris_config=doris_config,
+            doris_database=payload.get("doris_database"),
+            schema=source_config.get("schema"),
+        )
+    result = {
+        "source_type": source_type,
+        "database": database_name,
+        "doris_database": doris_config.get("database") or payload.get("doris_database") or database_name,
+        "consistent": all(item["consistent"] for item in results.values()),
+        "tables": results,
+        "errors": {},
+    }
+    return _ok(result, message="表结构一致" if result["consistent"] else "存在表结构差异")
 
 
 @csrf_exempt
 @require_POST
 def datax_sync(request):
-    """先校验 MySQL 与 Doris 表结构一致, 再执行 DataX 同步表数据。"""
+    """先校验源端与 Doris 表结构一致, 再执行 DataX 同步(离线全量/增量由 truncate/splitPk 控制)。"""
     payload, err = _parse_json_body(request)
     if err:
         return _fail(err, code=400, status=400)
 
-    mysql_config = get_database_config(payload)
-    if mysql_config["db_type"] != "mysql":
-        return _fail("DataX 同步仅支持 MySQL 作为源库", code=400, status=400)
     tables, err = _tables_from_payload(payload)
     if err:
         return _fail(err, code=400, status=400)
+    context, message = _datax_source_context(payload)
+    if message:
+        return _fail(message, code=400, status=400)
+    source_config, source_type, database_name = context
 
     doris_config = get_doris_config(payload)
     datax_config = get_datax_config(payload)
@@ -356,13 +373,24 @@ def datax_sync(request):
     preview = bool(payload.get("preview", False))
     split_pk = payload.get("split_pk") or None
 
-    check = check_tables(
-        mysql_config,
-        doris_config,
-        mysql_config["database"],
-        tables,
-        doris_database=doris_database,
-    )
+    check = {
+        "source_type": source_type,
+        "database": database_name,
+        "consistent": True,
+        "tables": {},
+    }
+    for table in tables:
+        table_check = compare_source_doris(
+            source_type,
+            source_config,
+            database_name,
+            table,
+            doris_config=doris_config,
+            doris_database=doris_database,
+            schema=source_config.get("schema"),
+        )
+        check["tables"][table] = table_check
+        check["consistent"] = check["consistent"] and table_check["consistent"]
     if not check["consistent"] and not force and not preview:
         return JsonResponse(
             {
@@ -377,11 +405,12 @@ def datax_sync(request):
     for table in tables:
         try:
             result = sync_table_data(
-                mysql_config,
+                source_config,
                 doris_config,
                 datax_config,
-                mysql_config["database"],
+                database_name,
                 table,
+                source_type=source_type,
                 doris_database=doris_database,
                 truncate=truncate,
                 channel=channel,
@@ -409,6 +438,48 @@ def datax_sync(request):
     else:
         message = "DataX 同步存在失败, 详见 results"
     return _ok({"check": check, "results": results}, message=message)
+
+
+def _datax_source_context(payload: dict):
+    """解析 DataX/校验的源端配置, 返回 (config, source_type, database_name)。"""
+    if payload.get("source_id"):
+        source = get_object_or_404(MetadataSourceConfig, pk=payload["source_id"])
+        source_type = source.db_type
+        if source_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"oracle", "clickhouse"}:
+            return None, f"{source_type} 暂不支持 DataX/结构比对"
+        config = {
+            "db_type": source_type,
+            "host": source.host,
+            "port": source.port or DEFAULT_PORTS.get(source_type),
+            "user": source.username,
+            "password": source.password,
+            "database": source.database_name,
+            "schema": source.schema_name
+            or ("public" if source_type in POSTGRES_LIKE_TYPES else ""),
+        }
+        return (config, source_type, source.database_name), None
+
+    source_type = str(payload.get("db_type") or "mysql").strip().lower()
+    if source_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"oracle", "clickhouse"}:
+        return None, f"{source_type} 暂不支持 DataX/结构比对"
+    if source_type == "mysql":
+        config = get_database_config(payload)
+        database_name = config["database"]
+        return (config, source_type, database_name), None
+    host = str(payload.get("host") or "").strip()
+    if not host:
+        return None, "pg/oracle/clickhouse 源需要传 host/port/user/password/database"
+    config = {
+        "db_type": source_type,
+        "host": host,
+        "port": int(payload.get("port") or DEFAULT_PORTS.get(source_type)),
+        "user": str(payload.get("user") or "").strip(),
+        "password": str(payload.get("password") or ""),
+        "database": str(payload.get("database") or "").strip(),
+        "schema": str(payload.get("schema") or "").strip()
+        or ("public" if source_type in POSTGRES_LIKE_TYPES else ""),
+    }
+    return (config, source_type, config["database"]), None
 
 
 @csrf_exempt
@@ -773,10 +844,37 @@ def flink_sync_apply(request):
     if not job_name:
         return _fail("缺少 job 参数", code=400, status=400)
     try:
-        result = apply_job(job_name, doris_sync=bool((payload or {}).get("doris_sync", True)))
+        result = apply_job(
+            job_name,
+            doris_sync=bool((payload or {}).get("doris_sync", True)),
+            force_structure=bool((payload or {}).get("force_structure", False)),
+        )
     except Exception as exc:
         return _fail(f"执行失败: {exc}", code=500, status=500)
     return _ok(result, message="变更流程执行完成")
+
+
+@csrf_exempt
+@require_POST
+def flink_sync_structure_check(request):
+    """启动 Flink SQL 前比对源表与 Doris 目标表结构。"""
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    job_name = (payload or {}).get("job")
+    if not job_name:
+        return _fail("缺少 job 参数", code=400, status=400)
+    from .services.flink_sync import load_jobs_config
+
+    flink_cfg = load_jobs_config()
+    job = next((j for j in flink_cfg["jobs"] if j["name"] == job_name), None)
+    if job is None:
+        return _fail(f"未找到作业: {job_name}", code=404, status=404)
+    try:
+        result = check_job_structure(job, flink_cfg)
+    except Exception as exc:
+        return _fail(f"比对失败: {exc}", code=500, status=500)
+    return _ok(result, message="结构一致" if result["consistent"] else "结构不一致")
 
 
 # ---------------------------------------------------------------- 元数据源配置

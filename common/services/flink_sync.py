@@ -293,6 +293,31 @@ def job_running_state(job_name: str, flink_cfg: dict) -> dict:
         return {"ok": False, "state": "ERROR", "message": str(exc)}
 
 
+def check_job_structure(job: dict, flink_cfg: dict | None = None) -> dict:
+    """启动 Flink SQL 前比对 源表 vs Doris 目标表结构。"""
+    from .schema_check import compare_source_doris
+
+    source = job["source_db"]
+    source_type = source.get("db_type", "mysql")
+    result = compare_source_doris(
+        source_type,
+        source,
+        source.get("database", ""),
+        job["source_table"],
+        doris_config={
+            "host": job["doris_host"],
+            "port": job.get("doris_fe_http_port", 9030),
+            "user": job.get("doris_user", "root"),
+            "password": job.get("doris_password", ""),
+            "database": job["doris_database"],
+        },
+        doris_database=job["doris_database"],
+        schema=source.get("schema"),
+    )
+    return {"job": job["name"], "consistent": result["consistent"],
+            "differences": result["differences"], "warnings": result["warnings"]}
+
+
 # ---------------------------------------------------------------- Flink 执行
 
 def _rest_get(base: str, path: str) -> tuple[int, dict]:
@@ -425,7 +450,8 @@ def generate_job(job_name: str | None = None) -> dict:
     return {"results": results}
 
 
-def apply_job(job_name: str, *, doris_sync: bool = True) -> dict:
+def apply_job(job_name: str, *, doris_sync: bool = True,
+              check_structure: bool = True, force_structure: bool = False) -> dict:
     """完整流程: (可选)Doris 结构同步 -> savepoint 停止 -> 生成 SQL -> 提交。"""
     flink_cfg = load_jobs_config()
     job = next((j for j in flink_cfg["jobs"] if j["name"] == job_name), None)
@@ -433,6 +459,18 @@ def apply_job(job_name: str, *, doris_sync: bool = True) -> dict:
         raise ValueError(f"未找到作业: {job_name}")
 
     result = {"job": job["name"], "steps": []}
+
+    # 0) 同步前结构比对闸门(实时全量/增量作业统一先比对)
+    if check_structure:
+        structure = check_job_structure(job, flink_cfg)
+        result["steps"].append({"step": "structure_check", **structure})
+        if not structure["consistent"] and not force_structure:
+            result["steps"].append({
+                "step": "blocked",
+                "message": "源表与 Doris 目标表结构不一致, 未停止/重启作业; "
+                           "可先执行 schema_sync 对齐, 或传 force_structure=true 强制",
+            })
+            return result
 
     # 1) Doris 结构同步(仅 MySQL 源支持自动; PG 提示人工)
     if doris_sync:

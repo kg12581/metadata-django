@@ -23,7 +23,7 @@ curl -X POST http://127.0.0.1:8000/api/metadata/sync/ \
 
 | 方法 | 路径 | 说明 |
 | --- | --- | --- |
-| POST | `/datax/check/` | MySQL vs Doris 结构一致性校验, 返回 `data.consistent` |
+| POST | `/datax/check/` | 源端 vs Doris 结构校验(source_id 或 db_type+连接, 默认 MySQL) |
 | POST | `/datax/sync/` | 校验一致后执行 DataX 同步 |
 | POST | `/schema-sync/` | 按 MySQL 元数据自动对齐 Doris(增删改字段/自动建表) |
 | GET/POST | `/schema-sync/task/` | 定时任务配置 |
@@ -54,7 +54,8 @@ curl -X POST http://127.0.0.1:8000/api/metadata/datax/sync/ \
 | GET | `/flink-sql/file/?name=xxx.sql` | 文件内容 |
 | GET | `/flink-sync/jobs/` | 作业状态与结构差异 |
 | POST | `/flink-sync/generate/` | 重新生成运行时 SQL |
-| POST | `/flink-sync/apply/` | savepoint 停止 -> 生成 -> 重启 |
+| POST | `/flink-sync/check/` | 启动前比对 源表 vs Doris 目标表结构 |
+| POST | `/flink-sync/apply/` | 结构比对通过后: savepoint 停止 -> 生成 -> 重启(`force_structure=true` 可跳过) |
 
 ## 5. 数据源配置
 

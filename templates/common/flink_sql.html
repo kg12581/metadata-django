@@ -106,6 +106,7 @@ function renderJob(j) {
     return b;
   };
   makeBtn('生成 SQL', 'ghost', () => jobAction(j.job, 'generate'));
+  makeBtn('结构比对', 'ghost', () => jobAction(j.job, 'check'));
   makeBtn('执行变更并重启', '', () => jobAction(j.job, 'apply'));
   card.appendChild(buttons);
   list.appendChild(card);

@@ -6,7 +6,18 @@ import os
 import subprocess
 import tempfile
 
-from .schema_check import check_tables, fetch_mysql_columns
+from .schema_check import compare_source_doris
+from .schema_sync import fetch_source_columns
+
+READER_PLUGINS = {
+    "mysql": "mysqlreader",
+    "postgresql": "postgresqlreader",
+    "gaussdb": "postgresqlreader",
+    "dws": "postgresqlreader",
+    "opengauss": "postgresqlreader",
+    "oracle": "oraclereader",
+    "clickhouse": "clickhousereader",
+}
 
 
 def build_job(
@@ -16,6 +27,7 @@ def build_job(
     table: str,
     column_names: list[str],
     *,
+    source_type: str = "mysql",
     split_pk: str | None = None,
     channel: int = 3,
     truncate: bool = True,
@@ -23,12 +35,20 @@ def build_job(
     """构造 MySQL -> Doris 的 DataX job 配置。"""
     doris_database = doris_config.get("database") or database
 
-    jdbc_url = (
-        f"jdbc:mysql://{mysql_config['host']}:{mysql_config['port']}/{database}"
-        "?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true"
-    )
+    plugin = READER_PLUGINS.get(source_type, "mysqlreader")
+    if source_type == "oracle":
+        jdbc_url = f"jdbc:oracle:thin:@{mysql_config['host']}:{mysql_config['port']}/{database}"
+    elif source_type == "clickhouse":
+        jdbc_url = f"jdbc:clickhouse://{mysql_config['host']}:{mysql_config['port']}/{database}"
+    elif source_type in ("postgresql", "gaussdb", "dws", "opengauss"):
+        jdbc_url = f"jdbc:postgresql://{mysql_config['host']}:{mysql_config['port']}/{database}"
+    else:
+        jdbc_url = (
+            f"jdbc:mysql://{mysql_config['host']}:{mysql_config['port']}/{database}"
+            "?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true"
+        )
     reader = {
-        "name": "mysqlreader",
+        "name": plugin,
         "parameter": {
             "username": mysql_config["user"],
             "password": mysql_config["password"],
@@ -116,6 +136,7 @@ def sync_table_data(
     database: str,
     table: str,
     *,
+    source_type: str = "mysql",
     doris_database: str | None = None,
     truncate: bool = True,
     channel: int = 3,
@@ -124,14 +145,16 @@ def sync_table_data(
     preview: bool = False,
 ) -> dict:
     """先校验表结构一致, 再生成并执行 DataX 同步。"""
-    check = check_tables(
+    check = compare_source_doris(
+        source_type,
         mysql_config,
-        doris_config,
         database,
-        [table],
+        table,
+        doris_config=doris_config,
         doris_database=doris_database,
+        schema=mysql_config.get("schema"),
     )
-    table_check = check["tables"][table]
+    table_check = check
 
     result = {
         "table": table,
@@ -144,13 +167,16 @@ def sync_table_data(
         "log_tail": "",
     }
 
-    columns = fetch_mysql_columns(mysql_config, database, table)
+    columns = fetch_source_columns(
+        source_type, mysql_config, database, table, schema=mysql_config.get("schema")
+    )
     job = build_job(
         mysql_config,
         doris_config,
         database,
         table,
         [col["name"] for col in columns],
+        source_type=source_type,
         split_pk=split_pk,
         channel=channel,
         truncate=truncate,
