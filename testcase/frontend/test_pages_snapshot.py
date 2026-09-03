@@ -12,6 +12,7 @@ SNAPSHOT_PAGES = {
     "reconcile": "/reconcile/",
     "scheduler": "/scheduler/",
     "sql_helper": "/sql-helper/",
+    "dictionary": "/dictionary/",
     "docs": "/docs/?file=04-api-reference.md",
     "ai_sql": "/ai-sql/",
     "spark2hive": "/spark2sql/",

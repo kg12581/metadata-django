@@ -3,54 +3,60 @@
     "name": "dashboard",
     "path": "/",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/dashboard.html",
-    "bytes": 12316
+    "bytes": 12379
   },
   {
     "name": "sources",
     "path": "/sources/",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/sources.html",
-    "bytes": 21143
+    "bytes": 21206
   },
   {
     "name": "reconcile",
     "path": "/reconcile/",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/reconcile.html",
-    "bytes": 17701
+    "bytes": 17764
   },
   {
     "name": "scheduler",
     "path": "/scheduler/",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/scheduler.html",
-    "bytes": 17414
+    "bytes": 17477
   },
   {
     "name": "sql_helper",
     "path": "/sql-helper/",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/sql_helper.html",
-    "bytes": 15204
+    "bytes": 15267
+  },
+  {
+    "name": "dictionary",
+    "path": "/dictionary/",
+    "file": "/Users/kgt/code/metadata-django/testcase/snapshots/dictionary.html",
+    "bytes": 14051
   },
   {
     "name": "docs",
     "path": "/docs/?file=04-api-reference.md",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/docs.html",
-    "bytes": 11513
+    "bytes": 11576
   },
   {
     "name": "ai_sql",
     "path": "/ai-sql/",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/ai_sql.html",
-    "bytes": 13944
+    "bytes": 14007
   },
   {
     "name": "spark2hive",
     "path": "/spark2sql/",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/spark2hive.html",
-    "bytes": 15405
+    "bytes": 15468
   },
   {
     "name": "oracle2hive",
     "path": "/oracle2hive/",
     "file": "/Users/kgt/code/metadata-django/testcase/snapshots/oracle2hive.html",
-    "bytes": 13912
+    "bytes": 13975
   }
 ]

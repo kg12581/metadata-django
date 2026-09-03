@@ -77,6 +77,7 @@ python manage.py runserver
 - `/flink-sql/` — Flink SQL 实时 CDC 作业文件查看
 - `/sources/` — 元数据源配置(MySQL/PG/Oracle/Hive/Doris/ClickHouse/DB2/ODPS/OceanBase/GaussDB/DWS/openGauss 等, JDBC)
 - `/sql-helper/` — SQL 助手: 选库选表一键生成 SELECT/INSERT/UPDATE/DELETE/COUNT
+- `/dictionary/` — 数据字典: 字段级字典浏览/搜索/导出 Excel
 - `/ai-sql/` — AI 辅助写 SQL(生成/优化/解释, 可关联元数据上下文)
 - `/spark2sql/` — Spark 代码 → Hive SQL(Java/Scala/Python, AI 转换)
 - `/oracle2hive/` — Oracle 存储过程 → Hive SQL(AI 转换)

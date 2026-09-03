@@ -1,0 +1,133 @@
+{% extends "common/base.html" %}
+{% block title %}数据字典 - 元数据管理平台{% endblock %}
+{% block content %}
+<div class="card">
+  <h2 style="margin:0 0 4px">数据字典</h2>
+  <div class="muted">基于已同步元数据的字段级字典; 支持按库/关键字过滤, 可导出 Excel</div>
+</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px" id="summaryCards"></div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:0">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+      <select id="dbSelect" onchange="search()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px">
+        <option value="">全部数据源</option>
+      </select>
+      <input id="qInput" placeholder="搜索 表名/字段/注释..." style="width:260px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px">
+      <button class="btn" onclick="search()">查询</button>
+      <span class="muted" id="resultInfo"></span>
+    </div>
+    <a class="btn ghost" id="exportLink" href="/api/metadata/dictionary/export/">导出 Excel</a>
+  </div>
+  <div style="overflow:auto">
+    <table>
+      <thead>
+        <tr>
+          <th>库</th><th>Schema</th><th>表名</th><th>表注释</th>
+          <th>#</th><th>字段名</th><th>类型</th><th>可空</th><th>默认值</th><th>字段注释</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="dictBody"></tbody>
+    </table>
+  </div>
+  <div style="margin-top:10px;display:flex;gap:8px">
+    <button class="btn ghost" id="prevBtn" onclick="page(-1)">上一页</button>
+    <button class="btn ghost" id="nextBtn" onclick="page(1)">下一页</button>
+  </div>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script>
+const LIMIT = 300;
+let total = 0;
+let offset = 0;
+let currentQ = '';
+let currentDb = '';
+
+function showInfo() {
+  document.getElementById('resultInfo').textContent =
+    '共 ' + total + ' 条, 显示 ' + offset + '-' + Math.min(offset + LIMIT, total);
+  document.getElementById('prevBtn').disabled = offset <= 0;
+  document.getElementById('nextBtn').disabled = offset + LIMIT >= total;
+}
+
+async function loadSummary() {
+  const resp = await fetch('/api/metadata/dictionary/summary/');
+  const data = (await resp.json()).data;
+  const cards = document.getElementById('summaryCards');
+  const mk = (label, value) => {
+    const d = document.createElement('div');
+    d.className = 'card';
+    d.style.cssText = 'margin:0;text-align:center';
+    d.innerHTML = '<div class="muted">' + label + '</div><div style="font-size:26px;font-weight:700">' + value + '</div>';
+    cards.appendChild(d);
+  };
+  mk('数据源', data.database_count);
+  mk('表', data.table_count);
+  mk('字段', data.column_count);
+  const sel = document.getElementById('dbSelect');
+  sel.innerHTML = '<option value="">全部数据源</option>';
+  (data.databases || []).forEach(db => {
+    const o = document.createElement('option');
+    o.value = db.id;
+    o.textContent = '[' + db.db_type + '] ' + db.database_name + ' (' + db.table_count + ' 表)';
+    sel.appendChild(o);
+  });
+}
+
+async function search() {
+  offset = 0;
+  currentQ = document.getElementById('qInput').value.trim();
+  currentDb = document.getElementById('dbSelect').value;
+  await fetchRows();
+  updateExportLink();
+}
+
+async function page(delta) {
+  offset += delta * LIMIT;
+  if (offset < 0) offset = 0;
+  await fetchRows();
+}
+
+async function fetchRows() {
+  const url = '/api/metadata/dictionary/search/?limit=' + LIMIT + '&offset=' + offset +
+    '&q=' + encodeURIComponent(currentQ) + '&database_id=' + encodeURIComponent(currentDb);
+  const resp = await fetch(url);
+  const data = (await resp.json()).data;
+  total = data.total;
+  const tbody = document.getElementById('dictBody');
+  tbody.innerHTML = '';
+  (data.items || []).forEach(row => {
+    const tr = document.createElement('tr');
+    const col = row.column;
+    tr.innerHTML =
+      '<td>' + row.database_name + '</td>' +
+      '<td class="mono">' + row.schema_name + '</td>' +
+      '<td class="mono">' + row.table_name + '</td>' +
+      '<td class="muted">' + (row.table_comment || '-') + '</td>' +
+      '<td>' + col.ordinal_position + '</td>' +
+      '<td class="mono"><strong>' + col.name + '</strong></td>' +
+      '<td class="mono">' + (col.column_type || col.data_type) + '</td>' +
+      '<td>' + (col.is_nullable ? '是' : '否') + '</td>' +
+      '<td class="mono">' + (col.column_default || '-') + '</td>' +
+      '<td class="muted">' + (col.comment || '-') + '</td>' +
+      '<td><a href="/tables/' + row.table_id + '/">详情</a></td>';
+    tbody.appendChild(tr);
+  });
+  showInfo();
+}
+
+function updateExportLink() {
+  const url = '/api/metadata/dictionary/export/?q=' + encodeURIComponent(currentQ) +
+    '&database_id=' + encodeURIComponent(currentDb);
+  document.getElementById('exportLink').href = url;
+}
+
+document.getElementById('qInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') search();
+});
+
+loadSummary().then(search);
+</script>
+{% endblock %}

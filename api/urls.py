@@ -68,4 +68,7 @@ urlpatterns = [
     path("scheduler/jobs/<int:pk>/run/", views.scheduler_job_run, name="scheduler-job-run"),
     path("scheduler/runs/", views.scheduler_runs, name="scheduler-runs"),
     path("scheduler/cron/refresh/", views.scheduler_refresh_cron, name="scheduler-cron-refresh"),
+    path("dictionary/summary/", views.dictionary_summary, name="dictionary-summary"),
+    path("dictionary/search/", views.dictionary_search, name="dictionary-search"),
+    path("dictionary/export/", views.dictionary_export, name="dictionary-export"),
 ]

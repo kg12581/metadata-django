@@ -76,6 +76,7 @@ flowchart LR
 | Flink SQL(作业查看 + 自动同步) | `/flink-sql/` |
 | 数据源配置(JDBC) | `/sources/` |
 | SQL 助手 | `/sql-helper/` |
+| 数据字典 | `/dictionary/`(字段级浏览/搜索/导出) |
 | 对账中心 / SQL 文件库 / 血缘 / 文档 | `/reconcile/`, `/sql-files/`, `/lineage/`, `/docs/` |
 | 运营看板 / 脚本管理 | `/ops/`, `/scripts/` |
 | 调度中心 | `/scheduler/`(脚本 + ETL 定时执行) |

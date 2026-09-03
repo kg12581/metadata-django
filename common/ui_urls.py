@@ -13,6 +13,7 @@ urlpatterns = [
     path("flink-sql/", views.flink_sql_page, name="flink-sql-page"),
     path("sources/", views.sources_page, name="sources-page"),
     path("sql-helper/", views.sql_helper_page, name="sql-helper-page"),
+    path("dictionary/", views.dictionary_page, name="dictionary-page"),
     path("ai-sql/", views.ai_sql_page, name="ai-sql-page"),
     path("spark2sql/", views.spark_to_hive_page, name="spark-to-hive-page"),
     path("oracle2hive/", views.oracle_to_hive_page, name="oracle-to-hive-page"),

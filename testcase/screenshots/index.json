@@ -15,6 +15,11 @@
     "size_kb": 72.9
   },
   {
+    "name": "dictionary",
+    "file": "testcase/screenshots/dictionary.png",
+    "size_kb": 118.3
+  },
+  {
     "name": "docs",
     "file": "testcase/screenshots/docs.png",
     "size_kb": 135.5

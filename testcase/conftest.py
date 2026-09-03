@@ -27,6 +27,7 @@ def page_paths():
         "/",
         "/sources/",
         "/sql-helper/",
+        "/dictionary/",
         "/reconcile/",
         "/scheduler/",
         "/scripts/",

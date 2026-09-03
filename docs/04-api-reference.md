@@ -106,6 +106,14 @@ curl -X POST http://127.0.0.1:8000/api/metadata/reconcile/tasks/1/run/
 | GET | `/docs/` / `/docs/file/?name=` | 文档列表/内容(HTML) |
 | GET | `/ops/summary/?days=7` | 运营看板汇总 |
 
+## 11. 数据字典
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/dictionary/summary/` | 概览(库/表/字段数 + 数据源选项) |
+| GET | `/dictionary/search/?q=&database_id=&limit=&offset=` | 字段级字典检索(表名/字段/注释) |
+| GET | `/dictionary/export/?q=&database_id=` | 导出当前筛选为 Excel |
+
 ## 9. 脚本管理
 
 | 方法 | 路径 | 说明 |

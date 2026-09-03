@@ -17,6 +17,7 @@ from .config import get_datax_config, get_database_config, get_doris_config
 from .models import (
     AnalyticsEvent,
     LineageEdge,
+    MetadataColumn,
     MetadataDatabase,
     MetadataSourceConfig,
     MetadataTable,
@@ -1936,3 +1937,150 @@ def health_check(request):
 
     connection.ensure_connection()
     return _ok({"status": "ok", "time": timezone.now().isoformat()})
+
+
+# ---------------------------------------------------------------- 数据字典
+
+@require_GET
+def dictionary_page(request):
+    """前端页面: 数据字典。"""
+    return render(request, "common/dictionary.html", {})
+
+
+@require_GET
+def dictionary_summary(request):
+    from django.db.models import Count
+
+    databases = list(
+        MetadataDatabase.objects.annotate(table_count=Count("tables"))
+        .order_by("database_name", "db_type")
+        .values("id", "name", "db_type", "database_name", "host", "table_count")
+    )
+    return _ok(
+        {
+            "databases": databases,
+            "database_count": MetadataDatabase.objects.count(),
+            "table_count": MetadataTable.objects.count(),
+            "column_count": MetadataColumn.objects.count(),
+        }
+    )
+
+
+def _dictionary_queryset(q: str = "", db_id: str = ""):
+    from django.db.models import Q
+
+    qs = MetadataColumn.objects.select_related("table__database").all()
+    if db_id:
+        qs = qs.filter(table__database_id=db_id)
+    if q:
+        keyword = q.strip()
+        qs = qs.filter(
+            Q(name__icontains=keyword)
+            | Q(comment__icontains=keyword)
+            | Q(table__name__icontains=keyword)
+            | Q(table__comment__icontains=keyword)
+            | Q(table__schema_name__icontains=keyword)
+        )
+    return qs
+
+
+@require_GET
+def dictionary_search(request):
+    q = request.GET.get("q", "")
+    db_id = request.GET.get("database_id", "")
+    try:
+        limit = max(1, min(int(request.GET.get("limit", 300)), 2000))
+        offset = max(0, int(request.GET.get("offset", 0)))
+    except (TypeError, ValueError):
+        limit, offset = 300, 0
+    queryset = _dictionary_queryset(q, db_id)
+    total = queryset.count()
+    items = [
+        {
+            "database_id": col.table.database_id,
+            "database_name": col.table.database.database_name,
+            "db_type": col.table.database.db_type,
+            "schema_name": col.table.schema_name,
+            "table_id": col.table_id,
+            "table_name": col.table.name,
+            "table_comment": col.table.comment,
+            "column": {
+                "id": col.id,
+                "name": col.name,
+                "ordinal_position": col.ordinal_position,
+                "data_type": col.data_type,
+                "column_type": col.column_type,
+                "is_nullable": col.is_nullable,
+                "column_default": col.column_default,
+                "comment": col.comment,
+            },
+        }
+        for col in queryset.order_by(
+            "table__database_id", "table__schema_name", "table__name",
+            "ordinal_position",
+        )[offset : offset + limit]
+    ]
+    return _ok(
+        {
+            "q": q,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+            "items": items,
+        }
+    )
+
+
+@require_GET
+def dictionary_export(request):
+    """导出当前筛选条件下的数据字典为 Excel。"""
+    q = request.GET.get("q", "")
+    db_id = request.GET.get("database_id", "")
+    from io import BytesIO
+
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill
+        from openpyxl.utils import get_column_letter
+    except ImportError as exc:
+        raise RuntimeError("缺少 openpyxl, 请先执行: pip install -r requirements.txt") from exc
+
+    queryset = _dictionary_queryset(q, db_id)
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "数据字典"
+    headers = ["数据库", "类型", "Schema", "表名", "表注释", "字段序号", "字段名", "数据类型", "可空", "默认值", "字段注释"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor="2563EB")
+    for col in queryset.order_by("table__database_id", "table__schema_name", "table__name", "ordinal_position"):
+        ws.append(
+            [
+                col.table.database.database_name,
+                col.table.database.db_type,
+                col.table.schema_name,
+                col.table.name,
+                col.table.comment,
+                col.ordinal_position,
+                col.name,
+                col.column_type or col.data_type,
+                "是" if col.is_nullable else "否",
+                col.column_default or "",
+                col.comment,
+            ]
+        )
+    for index, width in enumerate([22, 12, 18, 30, 30, 8, 24, 20, 8, 26, 40], start=1):
+        ws.column_dimensions[get_column_letter(index)].width = width
+    ws.freeze_panes = "A2"
+
+    buffer = BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    filename = f"数据字典_{timezone.now():%Y%m%d_%H%M%S}.xlsx"
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    response["Content-Disposition"] = f"attachment; filename={filename}"
+    return response
