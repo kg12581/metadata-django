@@ -7,3 +7,4 @@ sqlparse>=0.5
 markdown>=3.6
 paramiko>=3.4
 mcp>=2.0
+gunicorn>=21.2

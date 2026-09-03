@@ -31,6 +31,27 @@
 - 服务端埋点与运营看板(/ops/)
 - MCP 服务: 平台 API 暴露为 MCP tools(`mcp/server.py`)
 - 脚本管理平台: 集中浏览/编辑/运行 shell 与 python 脚本(/scripts/)
+- 自动化测试: pytest 套件(见 `testcase/`), 含 HTML 报告与页面截图
+
+### 测试与报告
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest testcase -q --html=testcase/reports/report.html --self-contained-html
+```
+
+31 项用例覆盖: 模型加密、schema 类型映射/差异、血缘解析、Debezium/ETL 逻辑、
+API 冒烟、页面快照、调度/脚本安全。报告与截图见 `testcase/reports/`、`testcase/screenshots/`,
+详情见 [docs/05-testing.md](docs/05-testing.md)。
+
+### 部署(可选)
+
+```bash
+docker compose up -d --build   # PostgreSQL + gunicorn
+```
+
+生产环境变量: `DJANGO_SECRET_KEY` / `DJANGO_DEBUG=0` / `DJANGO_ALLOWED_HOSTS` /
+`DJANGO_DB_ENGINE=postgres` 等(见 [core/settings.py](core/settings.py)); 健康检查 `/healthz/`。
 
 ## 快速开始
 

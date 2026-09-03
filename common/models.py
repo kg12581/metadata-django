@@ -1,5 +1,7 @@
 from django.db import models
 
+from .fields import EncryptedCharField
+
 
 class DatabaseType(models.TextChoices):
     POSTGRESQL = "postgresql", "PostgreSQL"
@@ -90,7 +92,7 @@ class MetadataSourceConfig(models.Model):
     database_name = models.CharField("数据库/服务名", max_length=200, blank=True, default="")
     schema_name = models.CharField("Schema", max_length=200, blank=True, default="")
     username = models.CharField("用户名", max_length=200, blank=True, default="")
-    password = models.CharField("密码", max_length=500, blank=True, default="")
+    password = EncryptedCharField("密码", max_length=1000, blank=True, default="")
     remark = models.TextField("备注", blank=True, default="")
     enabled = models.BooleanField("启用", default=True)
     created_at = models.DateTimeField("创建时间", auto_now_add=True)

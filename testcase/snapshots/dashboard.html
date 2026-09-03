@@ -1,0 +1,375 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>数据源总览 - 元数据管理平台</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                   "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: #0f172a;
+      color: #fff;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 54px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+    }
+    .brand {
+      color: #fff;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 16px;
+      white-space: nowrap;
+      padding-right: 14px;
+      border-right: 1px solid rgba(255, 255, 255, .18);
+    }
+    .nav-scroll {
+      display: flex;
+      align-items: stretch;
+      overflow: visible;
+      scrollbar-width: none;
+      flex: 1;
+    }
+    .nav-group { position: relative; }
+    .nav-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      font-size: 14px;
+      padding: 0 12px;
+      height: 54px;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    .nav-toggle:hover,
+    .nav-group.open .nav-toggle,
+    .nav-group.current .nav-toggle { color: #fff; }
+    .nav-group.current .nav-toggle { box-shadow: inset 0 -3px 0 #3b82f6; }
+    .caret { font-size: 10px; opacity: .8; }
+    .dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 8px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .18);
+      min-width: 190px;
+      padding: 6px;
+      z-index: 120;
+    }
+    .nav-group.open .dropdown { display: block; }
+    .dropdown a {
+      display: block;
+      color: #334155;
+      text-decoration: none;
+      padding: 9px 12px;
+      border-radius: 7px;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .dropdown a:hover { background: #f1f5f9; color: var(--primary); }
+    .dropdown .sep {
+      height: 1px;
+      background: var(--border);
+      margin: 5px 8px;
+    }
+    @media (max-width: 720px) {
+      .brand { font-size: 14px; padding-right: 8px; }
+      .nav-toggle { padding: 0 8px; font-size: 13px; }
+      .nav-scroll { overflow-x: auto; }
+      .nav-group.open .dropdown {
+        position: static;
+        min-width: 0;
+        box-shadow: none;
+        border-radius: 0;
+        background: #f8fafc;
+      }
+    }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    h2, h3 { margin-top: 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .danger { color: #b91c1c; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { background: #f8fafc; white-space: nowrap; }
+    tr:hover td { background: #f8fafc; }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .badge.synced  { background: #dcfce7; color: #166534; }
+    .badge.error   { background: #fee2e2; color: #991b1b; }
+    .badge.pending { background: #fef9c3; color: #854d0e; }
+    .btn {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .btn:disabled { opacity: .6; cursor: wait; }
+    .btn.ghost { background: #e2e8f0; color: #0f172a; }
+    input[type=search] {
+      padding: 8px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      width: 280px;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .grid .card { margin-bottom: 0; display: flex; flex-direction: column; }
+    .grid .card .grow { flex: 1; }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">元数据管理平台</a>
+    <nav class="nav-scroll" id="mainNav">
+      <div class="nav-group" data-match="/">
+        <a class="nav-toggle" href="/">数据总览</a>
+      </div>
+      <div class="nav-group" data-match="/ai-sql/">
+        <a class="nav-toggle" href="/ai-sql/">AI 写 SQL</a>
+      </div>
+      <div class="nav-group" data-match="/spark2sql/">
+        <a class="nav-toggle" href="/spark2sql/">Spark 转 Hive</a>
+      </div>
+      <div class="nav-group" data-match="/oracle2hive/">
+        <a class="nav-toggle" href="/oracle2hive/">Oracle 转 Hive</a>
+      </div>
+      <div class="nav-group" data-match="/scheduler/">
+        <a class="nav-toggle" href="/scheduler/">调度中心</a>
+      </div>
+      <div class="nav-group" data-match="/sources/,/sql-helper/,/databases/,/tables/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">元数据 <span class="caret">▾</span></button>
+        <div class="dropdown">
+          <a href="/">数据源总览</a>
+          <a href="/sources/">数据源配置(JDBC)</a>
+          <a href="/sql-helper/">SQL 助手</a>
+          <a href="/ai-sql/">AI 写 SQL</a>
+          <a href="/spark2sql/">Spark 转 Hive</a>
+          <a href="/oracle2hive/">Oracle 转 Hive</a>
+        </div>
+      </div>
+      <div class="nav-group" data-match="/schema-sync/,/datax/,/etl/,/flink-sql/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">数据同步 <span class="caret">▾</span></button>
+        <div class="dropdown">
+          <a href="/schema-sync/">结构同步任务</a>
+          <a href="/scheduler/">调度中心</a>
+          <a href="/datax/">DataX 同步</a>
+          <a href="/etl/">ETL 管理</a>
+          <a href="/flink-sql/">Flink SQL</a>
+        </div>
+      </div>
+      <div class="nav-group" data-match="/reconcile/,/sql-files/,/lineage/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">质量治理 <span class="caret">▾</span></button>
+        <div class="dropdown">
+          <a href="/reconcile/">对账中心</a>
+          <a href="/sql-files/">SQL 文件库</a>
+          <a href="/lineage/">SQL 血缘</a>
+        </div>
+      </div>
+      <div class="nav-group" data-match="/ops/,/scripts/,/docs/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">平台运营 <span class="caret">▾</span></button>
+        <div class="dropdown">
+          <a href="/ops/">运营看板</a>
+          <a href="/scripts/">脚本管理</a>
+          <a href="/docs/">在线文档</a>
+          <a href="/docs/?file=04-api-reference.md">API 文档</a>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <div class="container">
+    
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 style="margin:0 0 4px">数据源</h2>
+      <div class="muted">共 0 个数据源, 元数据来自远端 information_schema</div>
+    </div>
+    <button class="btn" id="syncBtn" onclick="triggerSync()">立即同步</button>
+  </div>
+  <div class="toolbar" style="border-top:1px solid var(--border);padding-top:12px;margin-bottom:0">
+    <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer">
+      <input type="checkbox" id="autoSyncCheck"> 定时自动同步
+    </label>
+    <div style="display:flex;align-items:center;gap:10px;font-size:14px">
+      <select id="autoSyncInterval" style="padding:6px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+        <option value="5">每 5 分钟</option>
+        <option value="10" selected>每 10 分钟</option>
+        <option value="30">每 30 分钟</option>
+        <option value="60">每 60 分钟</option>
+      </select>
+      <span class="muted" id="autoSyncStatus"></span>
+    </div>
+  </div>
+</div>
+
+
+<div class="card">
+  <p>还没有同步过数据源。点击右上角「立即同步」拉取远端元数据。</p>
+</div>
+
+
+  </div>
+  
+<script>
+const AUTO_KEY = 'metadataAutoSyncEnabled';
+const INTERVAL_KEY = 'metadataAutoSyncInterval';
+const check = document.getElementById('autoSyncCheck');
+const select = document.getElementById('autoSyncInterval');
+const statusEl = document.getElementById('autoSyncStatus');
+let autoTimer = null;
+
+function loadPrefs() {
+  check.checked = localStorage.getItem(AUTO_KEY) === '1';
+  select.value = localStorage.getItem(INTERVAL_KEY) || '10';
+}
+
+function savePrefs() {
+  localStorage.setItem(AUTO_KEY, check.checked ? '1' : '0');
+  localStorage.setItem(INTERVAL_KEY, select.value);
+}
+
+function updateStatus() {
+  if (check.checked) {
+    const next = new Date(Date.now() + Number(select.value) * 60 * 1000);
+    statusEl.textContent = `已开启, 每 ${select.value} 分钟 · 下次 ${next.toTimeString().slice(0, 8)}`;
+  } else {
+    statusEl.textContent = '已关闭';
+  }
+}
+
+function scheduleAutoSync() {
+  clearInterval(autoTimer);
+  if (check.checked) {
+    autoTimer = setInterval(runAutoSync, Number(select.value) * 60 * 1000);
+  }
+  updateStatus();
+}
+
+async function runAutoSync() {
+  try {
+    await fetch('/api/metadata/sync/', { method: 'POST' });
+    location.reload();
+  } catch (err) {
+    statusEl.textContent = '自动同步失败: ' + err;
+  }
+}
+
+async function triggerSync() {
+  const btn = document.getElementById('syncBtn');
+  btn.disabled = true;
+  btn.textContent = '同步中...';
+  try {
+    const resp = await fetch('/api/metadata/sync/', { method: 'POST' });
+    const data = await resp.json();
+    alert(data.message || '同步失败');
+    location.reload();
+  } catch (err) {
+    alert('同步失败: ' + err);
+    btn.disabled = false;
+    btn.textContent = '立即同步';
+  }
+}
+
+check.addEventListener('change', () => {
+  savePrefs();
+  if (check.checked) {
+    runAutoSync();  // 开启后立即同步一次
+  }
+  scheduleAutoSync();
+});
+select.addEventListener('change', () => {
+  savePrefs();
+  scheduleAutoSync();
+});
+
+loadPrefs();
+scheduleAutoSync();
+</script>
+
+  <script>
+  function toggleGroup(btn) {
+    var group = btn.parentElement;
+    var wasOpen = group.classList.contains('open');
+    document.querySelectorAll('#mainNav .nav-group.open').forEach(function (g) {
+      g.classList.remove('open');
+    });
+    if (!wasOpen) group.classList.add('open');
+  }
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('#mainNav .nav-group')) {
+      document.querySelectorAll('#mainNav .nav-group.open').forEach(function (g) {
+        g.classList.remove('open');
+      });
+    }
+  });
+  // 当前页面对应分组高亮
+  (function () {
+    var path = location.pathname;
+    document.querySelectorAll('#mainNav .nav-group').forEach(function (g) {
+      var matches = (g.getAttribute('data-match') || '').split(',');
+      if (matches.some(function (m) {
+        return m && (m === '/' ? path === '/' : path.indexOf(m) === 0);
+      })) {
+        g.classList.add('current');
+      }
+    });
+  })();
+  </script>
+</body>
+</html>

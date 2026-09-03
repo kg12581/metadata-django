@@ -1834,3 +1834,12 @@ def scheduler_refresh_cron(request):
     except Exception as exc:
         return _fail(f"刷新失败: {exc}", code=500, status=500)
     return _ok(result, message=f"crontab 已同步 {result['jobs_in_crontab']} 个启用任务")
+
+
+@require_GET
+def health_check(request):
+    """健康检查: 服务存活与数据库连通。"""
+    from django.db import connection
+
+    connection.ensure_connection()
+    return _ok({"status": "ok", "time": timezone.now().isoformat()})

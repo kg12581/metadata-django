@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+.idea
+__pycache__
+*.pyc
+db.sqlite3
+logs
+.venv
+venv
+datax/jobs
+flink_sql/jobs.json
+flink_sql/jobs_state.json
+flink_sql/generated
+testcase/reports
+testcase/snapshots
+testcase/screenshots

@@ -1,0 +1,376 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Oracle 转 Hive SQL - 元数据管理平台</title>
+  <style>
+    :root {
+      --primary: #2563eb;
+      --bg: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --muted: #64748b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                   "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+    header {
+      background: #0f172a;
+      color: #fff;
+      padding: 0 20px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 54px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 1px 4px rgba(0, 0, 0, .25);
+    }
+    .brand {
+      color: #fff;
+      text-decoration: none;
+      font-weight: 800;
+      font-size: 16px;
+      white-space: nowrap;
+      padding-right: 14px;
+      border-right: 1px solid rgba(255, 255, 255, .18);
+    }
+    .nav-scroll {
+      display: flex;
+      align-items: stretch;
+      overflow: visible;
+      scrollbar-width: none;
+      flex: 1;
+    }
+    .nav-group { position: relative; }
+    .nav-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      font-size: 14px;
+      padding: 0 12px;
+      height: 54px;
+      cursor: pointer;
+      text-decoration: none;
+      white-space: nowrap;
+      font-family: inherit;
+    }
+    .nav-toggle:hover,
+    .nav-group.open .nav-toggle,
+    .nav-group.current .nav-toggle { color: #fff; }
+    .nav-group.current .nav-toggle { box-shadow: inset 0 -3px 0 #3b82f6; }
+    .caret { font-size: 10px; opacity: .8; }
+    .dropdown {
+      display: none;
+      position: absolute;
+      top: 100%;
+      left: 8px;
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, .18);
+      min-width: 190px;
+      padding: 6px;
+      z-index: 120;
+    }
+    .nav-group.open .dropdown { display: block; }
+    .dropdown a {
+      display: block;
+      color: #334155;
+      text-decoration: none;
+      padding: 9px 12px;
+      border-radius: 7px;
+      font-size: 14px;
+      white-space: nowrap;
+    }
+    .dropdown a:hover { background: #f1f5f9; color: var(--primary); }
+    .dropdown .sep {
+      height: 1px;
+      background: var(--border);
+      margin: 5px 8px;
+    }
+    @media (max-width: 720px) {
+      .brand { font-size: 14px; padding-right: 8px; }
+      .nav-toggle { padding: 0 8px; font-size: 13px; }
+      .nav-scroll { overflow-x: auto; }
+      .nav-group.open .dropdown {
+        position: static;
+        min-width: 0;
+        box-shadow: none;
+        border-radius: 0;
+        background: #f8fafc;
+      }
+    }
+    .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, .08);
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+    h2, h3 { margin-top: 0; }
+    .muted { color: var(--muted); font-size: 13px; }
+    .danger { color: #b91c1c; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+    th { background: #f8fafc; white-space: nowrap; }
+    tr:hover td { background: #f8fafc; }
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .badge.synced  { background: #dcfce7; color: #166534; }
+    .badge.error   { background: #fee2e2; color: #991b1b; }
+    .badge.pending { background: #fef9c3; color: #854d0e; }
+    .btn {
+      display: inline-block;
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .btn:disabled { opacity: .6; cursor: wait; }
+    .btn.ghost { background: #e2e8f0; color: #0f172a; }
+    input[type=search] {
+      padding: 8px 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      width: 280px;
+      font-size: 14px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+    }
+    .grid .card { margin-bottom: 0; display: flex; flex-direction: column; }
+    .grid .card .grow { flex: 1; }
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  </style>
+</head>
+<body>
+  <header>
+    <a class="brand" href="/">元数据管理平台</a>
+    <nav class="nav-scroll" id="mainNav">
+      <div class="nav-group" data-match="/">
+        <a class="nav-toggle" href="/">数据总览</a>
+      </div>
+      <div class="nav-group" data-match="/ai-sql/">
+        <a class="nav-toggle" href="/ai-sql/">AI 写 SQL</a>
+      </div>
+      <div class="nav-group" data-match="/spark2sql/">
+        <a class="nav-toggle" href="/spark2sql/">Spark 转 Hive</a>
+      </div>
+      <div class="nav-group" data-match="/oracle2hive/">
+        <a class="nav-toggle" href="/oracle2hive/">Oracle 转 Hive</a>
+      </div>
+      <div class="nav-group" data-match="/scheduler/">
+        <a class="nav-toggle" href="/scheduler/">调度中心</a>
+      </div>
+      <div class="nav-group" data-match="/sources/,/sql-helper/,/databases/,/tables/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">元数据 <span class="caret">▾</span></button>
+        <div class="dropdown">
+          <a href="/">数据源总览</a>
+          <a href="/sources/">数据源配置(JDBC)</a>
+          <a href="/sql-helper/">SQL 助手</a>
+          <a href="/ai-sql/">AI 写 SQL</a>
+          <a href="/spark2sql/">Spark 转 Hive</a>
+          <a href="/oracle2hive/">Oracle 转 Hive</a>
+        </div>
+      </div>
+      <div class="nav-group" data-match="/schema-sync/,/datax/,/etl/,/flink-sql/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">数据同步 <span class="caret">▾</span></button>
+        <div class="dropdown">
+          <a href="/schema-sync/">结构同步任务</a>
+          <a href="/scheduler/">调度中心</a>
+          <a href="/datax/">DataX 同步</a>
+          <a href="/etl/">ETL 管理</a>
+          <a href="/flink-sql/">Flink SQL</a>
+        </div>
+      </div>
+      <div class="nav-group" data-match="/reconcile/,/sql-files/,/lineage/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">质量治理 <span class="caret">▾</span></button>
+        <div class="dropdown">
+          <a href="/reconcile/">对账中心</a>
+          <a href="/sql-files/">SQL 文件库</a>
+          <a href="/lineage/">SQL 血缘</a>
+        </div>
+      </div>
+      <div class="nav-group" data-match="/ops/,/scripts/,/docs/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">平台运营 <span class="caret">▾</span></button>
+        <div class="dropdown">
+          <a href="/ops/">运营看板</a>
+          <a href="/scripts/">脚本管理</a>
+          <a href="/docs/">在线文档</a>
+          <a href="/docs/?file=04-api-reference.md">API 文档</a>
+        </div>
+      </div>
+    </nav>
+  </header>
+  <div class="container">
+    
+<div class="card">
+  <h2 style="margin:0 0 4px">Oracle 存储过程 → Hive SQL</h2>
+  <div class="muted">粘贴 PL/SQL 存储过程/函数/匿名块, 由 AI 转换为等价 Hive SQL(需配置 LLM_API_KEY, 默认 DeepSeek)</div>
+</div>
+
+<div class="card">
+  <div class="toolbar" style="margin-bottom:8px;justify-content:flex-start;gap:12px">
+    <div>
+      <label class="muted">数据源表(可选, 提供字段上下文)</label>
+      <select id="dbSelect" onchange="loadTables()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-left:8px">
+        <option value="">不关联</option>
+      </select>
+      <select id="tableSelect" onchange="loadTableMeta()" style="padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-left:4px">
+        <option value="">(选数据源)</option>
+      </select>
+    </div>
+    <button class="btn ghost" onclick="loadSample()">填入示例过程</button>
+  </div>
+  <textarea id="codeBox" rows="14" spellcheck="false" style="width:100%;padding:12px;border:1px solid #cbd5e1;border-radius:8px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;box-sizing:border-box"></textarea>
+  <div id="metaHint" class="muted" style="margin:8px 0"></div>
+  <div style="margin-top:10px;display:flex;gap:8px">
+    <button class="btn" onclick="convert()">AI 生成 Hive SQL</button>
+    <button class="btn ghost" onclick="copyResult()">复制结果</button>
+  </div>
+</div>
+
+<div class="card">
+  <h3>AI 输出</h3>
+  <pre id="resultArea" style="background:#f8fafc;border:1px solid var(--border);border-radius:8px;padding:12px;overflow:auto;max-height:560px;font-size:13px;margin:0;white-space:pre-wrap">暂无输出。</pre>
+</div>
+
+  </div>
+  
+<script>
+const SAMPLE = `CREATE OR REPLACE PROCEDURE p_daily_sales_summary(p_biz_date VARCHAR2) IS
+    CURSOR cur_orders IS
+        SELECT o.product_id, p.product_name,
+               SUM(o.quantity)   AS total_qty,
+               SUM(o.amount)     AS total_amount,
+               COUNT(*)          AS order_cnt
+        FROM ods_orders o
+        JOIN dim_product p ON p.product_id = o.product_id
+        WHERE o.biz_date = p_biz_date
+        GROUP BY o.product_id, p.product_name;
+BEGIN
+    -- 清空结果表
+    DELETE FROM dws_daily_product_sales WHERE biz_date = p_biz_date;
+
+    FOR rec IN cur_orders LOOP
+        INSERT INTO dws_daily_product_sales
+            (biz_date, product_id, product_name, total_qty, total_amount, order_cnt)
+        VALUES
+            (p_biz_date, rec.product_id, rec.product_name,
+             rec.total_qty, rec.total_amount, rec.order_cnt);
+    END LOOP;
+    COMMIT;
+END p_daily_sales_summary;
+/`;
+let currentTableId='';
+
+async function loadOptions(){
+  const resp=await fetch('/api/metadata/sql-helper/options/');
+  const data=await resp.json();
+  const sel=document.getElementById('dbSelect');
+  (data.data||[]).forEach(db=>{
+    const o=document.createElement('option'); o.value=db.id;
+    o.textContent='['+db.db_type+'] '+db.database_name; sel.appendChild(o);
+  });
+}
+async function loadTables(){
+  const sel=document.getElementById('tableSelect');
+  sel.innerHTML='<option value="">(选数据源)</option>';
+  const dbId=document.getElementById('dbSelect').value;
+  if(!dbId)return;
+  const resp=await fetch('/api/metadata/sql-helper/tables/?db_id='+dbId);
+  const data=await resp.json();
+  (data.data||[]).slice(0,500).forEach(t=>{
+    const o=document.createElement('option'); o.value=t.id; o.textContent=t.name; sel.appendChild(o);
+  });
+}
+async function loadTableMeta(){
+  currentTableId=document.getElementById('tableSelect').value;
+  const hint=document.getElementById('metaHint');
+  if(!currentTableId){hint.textContent='';return;}
+  const resp=await fetch('/api/metadata/sql-helper/table/'+currentTableId+'/');
+  const data=await resp.json();
+  const info=data.data;
+  hint.textContent='已关联元数据: '+info.database.database_name+'.'+info.table.name+' ('+info.columns.length+' 字段) — 作为上下文提供给 AI';
+}
+function loadSample(){ document.getElementById('codeBox').value=SAMPLE; }
+async function convert(){
+  const code=document.getElementById('codeBox').value.trim();
+  if(!code){alert('请先粘贴 Oracle 存储过程');return;}
+  const area=document.getElementById('resultArea');
+  area.textContent='AI 转换中...';
+  const resp=await fetch('/api/metadata/llm/oracle-to-hive/',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({code:code, table_id:currentTableId||null})
+  });
+  const data=await resp.json();
+  area.textContent=data.code===0?data.data.result:data.message;
+}
+async function copyResult(){
+  const text=document.getElementById('resultArea').textContent;
+  if(text&&text!=='暂无输出。')await navigator.clipboard.writeText(text);
+}
+loadOptions();
+</script>
+
+  <script>
+  function toggleGroup(btn) {
+    var group = btn.parentElement;
+    var wasOpen = group.classList.contains('open');
+    document.querySelectorAll('#mainNav .nav-group.open').forEach(function (g) {
+      g.classList.remove('open');
+    });
+    if (!wasOpen) group.classList.add('open');
+  }
+  document.addEventListener('click', function (e) {
+    if (!e.target.closest('#mainNav .nav-group')) {
+      document.querySelectorAll('#mainNav .nav-group.open').forEach(function (g) {
+        g.classList.remove('open');
+      });
+    }
+  });
+  // 当前页面对应分组高亮
+  (function () {
+    var path = location.pathname;
+    document.querySelectorAll('#mainNav .nav-group').forEach(function (g) {
+      var matches = (g.getAttribute('data-match') || '').split(',');
+      if (matches.some(function (m) {
+        return m && (m === '/' ? path === '/' : path.indexOf(m) === 0);
+      })) {
+        g.classList.add('current');
+      }
+    });
+  })();
+  </script>
+</body>
+</html>
