@@ -180,34 +180,27 @@
       <div class="nav-group" data-match="/">
         <a class="nav-toggle" href="/">数据总览</a>
       </div>
-      <div class="nav-group" data-match="/ai-sql/">
-        <a class="nav-toggle" href="/ai-sql/">AI 写 SQL</a>
-      </div>
-      <div class="nav-group" data-match="/spark2sql/">
-        <a class="nav-toggle" href="/spark2sql/">Spark 转 Hive</a>
-      </div>
-      <div class="nav-group" data-match="/oracle2hive/">
-        <a class="nav-toggle" href="/oracle2hive/">Oracle 转 Hive</a>
-      </div>
-      <div class="nav-group" data-match="/scheduler/">
-        <a class="nav-toggle" href="/scheduler/">调度中心</a>
-      </div>
       <div class="nav-group" data-match="/sources/,/sql-helper/,/databases/,/tables/">
         <button class="nav-toggle" type="button" onclick="toggleGroup(this)">元数据 <span class="caret">▾</span></button>
         <div class="dropdown">
           <a href="/">数据源总览</a>
           <a href="/sources/">数据源配置(JDBC)</a>
           <a href="/sql-helper/">SQL 助手</a>
+        </div>
+      </div>
+      <div class="nav-group" data-match="/ai-sql/,/spark2sql/,/oracle2hive/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">AI 助手 <span class="caret">▾</span></button>
+        <div class="dropdown">
           <a href="/ai-sql/">AI 写 SQL</a>
           <a href="/spark2sql/">Spark 转 Hive</a>
           <a href="/oracle2hive/">Oracle 转 Hive</a>
         </div>
       </div>
-      <div class="nav-group" data-match="/schema-sync/,/datax/,/etl/,/flink-sql/">
+      <div class="nav-group" data-match="/scheduler/,/schema-sync/,/datax/,/etl/,/flink-sql/">
         <button class="nav-toggle" type="button" onclick="toggleGroup(this)">数据同步 <span class="caret">▾</span></button>
         <div class="dropdown">
-          <a href="/schema-sync/">结构同步任务</a>
           <a href="/scheduler/">调度中心</a>
+          <a href="/schema-sync/">结构同步任务</a>
           <a href="/datax/">DataX 同步</a>
           <a href="/etl/">ETL 管理</a>
           <a href="/flink-sql/">Flink SQL</a>
