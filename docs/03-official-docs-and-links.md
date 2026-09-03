@@ -38,6 +38,12 @@
 - HiveServer2 / Beeline 客户端: <https://hive.apache.org/docs/latest/user/hiveserver2-clients/>
 - Hive 语言手册(DDL/DML): <https://cwiki.apache.org/confluence/display/Hive/LanguageManual>
 
+### 云数仓 MaxCompute(ODPS)
+
+- MaxCompute 官方文档(阿里云): <https://www.alibabacloud.com/help/zh/maxcompute>
+- pyodps(Python SDK)文档: <https://pyodps.readthedocs.io/zh-cn/stable/>
+- ODPS JDBC 说明: <https://www.alibabacloud.com/help/zh/maxcompute/user-guide/jdbc>
+
 ### 编排 / 调度
 
 - Apache DolphinScheduler(中文文档): <https://dolphinscheduler.apache.org/zh-cn/docs/latest>

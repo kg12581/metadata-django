@@ -767,6 +767,7 @@ JDBC_TEMPLATES = {
     "doris": "jdbc:mysql://{host}:{port}/{database}",
     "sqlserver": "jdbc:sqlserver://{host}:{port};databaseName={database}",
     "kafka": "kafka://{host}:{port}",
+    "odps": "jdbc:odps:{host}",
     "other": "",
 }
 
@@ -778,6 +779,7 @@ DEFAULT_PORTS = {
     "doris": 9030,
     "sqlserver": 1433,
     "kafka": 9092,
+    "odps": 443,
 }
 
 
@@ -928,6 +930,17 @@ def source_test(request, pk):
             )
             conn.close()
             return _ok({"ok": True}, message="连接成功")
+        if source.db_type == "odps":
+            from odps import ODPS
+
+            odps = ODPS(
+                source.username or "",
+                source.password,
+                project=source.database_name or "",
+                endpoint=source.host or "",
+            )
+            next(iter(odps.list_tables()), None)  # 触发一次元数据请求验证连通性
+            return _ok({"ok": True, "project": source.database_name}, message="ODPS 连接成功")
         # 其余类型: TCP 连通性 + 提示
         import socket
         with socket.create_connection((host, port or 0), timeout=5):
@@ -944,8 +957,27 @@ def source_test(request, pk):
 def source_sync_metadata(request, pk):
     """用配置的连接信息同步元数据(支持 mysql / postgresql)。"""
     source = get_object_or_404(MetadataSourceConfig, pk=pk)
-    if source.db_type not in ("mysql", "postgresql"):
+    if source.db_type not in ("mysql", "postgresql", "odps"):
         return _fail(f"{source.db_type} 暂不支持元数据自动同步", code=400, status=400)
+    if source.db_type == "odps":
+        config = {
+            "db_type": "odps",
+            "host": source.host,
+            "port": source.port or 443,
+            "user": source.username,
+            "password": source.password,
+            "database": source.database_name,
+            "schema": source.database_name or "default",
+            "name": source.name,
+        }
+        try:
+            database, stats = sync_metadata(config)
+        except Exception as exc:
+            return _fail(f"同步失败: {exc}", code=500, status=500)
+        return _ok(
+            {"database": database_to_dict(database), "stats": stats},
+            message=f"同步完成: 表 {stats['tables']}, 字段 {stats['columns']}",
+        )
     config = {
         "db_type": source.db_type,
         "host": source.host,

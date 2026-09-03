@@ -4,6 +4,7 @@ from django.db import models
 class DatabaseType(models.TextChoices):
     POSTGRESQL = "postgresql", "PostgreSQL"
     MYSQL = "mysql", "MySQL"
+    ODPS = "odps", "MaxCompute(ODPS)"
 
 
 class SyncStatus(models.TextChoices):
@@ -20,6 +21,7 @@ class SourceType(models.TextChoices):
     DORIS = "doris", "Doris"
     SQLSERVER = "sqlserver", "SQL Server"
     KAFKA = "kafka", "Kafka"
+    ODPS = "odps", "MaxCompute(ODPS)"
     OTHER = "other", "其他"
 
 

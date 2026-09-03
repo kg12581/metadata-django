@@ -1,10 +1,12 @@
 from .base import MetadataReader
 from .mysql import MySQLReader
+from .odps import ODPSReader
 from .postgresql import PostgreSQLReader
 
 READERS: dict[str, type[MetadataReader]] = {
     PostgreSQLReader.DB_TYPE: PostgreSQLReader,
     MySQLReader.DB_TYPE: MySQLReader,
+    ODPSReader.DB_TYPE: ODPSReader,
 }
 
 

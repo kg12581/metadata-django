@@ -28,6 +28,7 @@
 | OLTP 源 | MySQL / PostgreSQL | ✅ 元数据读取 + 源配置 | Oracle 读取器待接(oracledb) |
 | OLAP | Doris / ClickHouse | ✅ Unique Key 建表/自动 DDL/校验 | 补数据模型分层(dwd/dws/ads)示例 |
 | 离线数仓 | Hive | ⏳ `hive_sql/` 模板与 DDL 生成 | 部署 HiveServer2 后补 beeline 提交/执行脚本 |
+| 云数仓 | MaxCompute(ODPS) | ⏳ ODPS 读取器/配置已接入(需 endpoint+AK/SK+Project) | 用 pyodps 扩展同步、与 odps-jdbc 打通 |
 | 数据湖 | Iceberg / Paimon / Hudi | ❌ | 建议下一步: Flink + Paimon 湖仓一体(见 03 链接) |
 
 ## 4. 计算引擎

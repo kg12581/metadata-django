@@ -54,7 +54,7 @@ python manage.py runserver
 - `/datax/` — DataX 同步管理(MySQL -> Doris: 结构校验/生成 job/执行)
 - `/etl/` — ETL 管理(Kafka Debezium -> Doris: 配置/后台运行/日志)
 - `/flink-sql/` — Flink SQL 实时 CDC 作业文件查看
-- `/sources/` — 元数据源配置(MySQL/PG/Oracle/Hive/Doris/SQL Server/Kafka, JDBC)
+- `/sources/` — 元数据源配置(MySQL/PG/Oracle/Hive/Doris/SQL Server/Kafka/ODPS 等, JDBC)
 - `/sql-helper/` — SQL 助手: 选库选表一键生成 SELECT/INSERT/UPDATE/DELETE/COUNT
 - `/ai-sql/` — AI 辅助写 SQL(生成/优化/解释, 可关联元数据上下文)
 - `/spark2sql/` — Spark 代码 → Hive SQL(Java/Scala/Python, AI 转换)
