@@ -343,6 +343,7 @@ python manage.py createsuperuser
 
 ```text
 core/                 Django 项目配置(settings/urls/wsgi/asgi)
+api/                 对外 REST 接口(路由 api/urls.py, 视图复用 common.views)
 templates/common/     Web 界面模板
 doris_sql/            Doris 建表/变更模板 + MySQL->Doris DDL 生成脚本
 hive_sql/             Hive 外部表模板 + MySQL->Hive DDL 生成脚本
@@ -350,6 +351,6 @@ common/
   models.py           元数据模型(库/表/字段/索引/约束)
   readers/            MySQL / PostgreSQL 元数据读取器
   services/sync.py    同步服务(远端 -> Django 表)
-  views.py, urls.py   REST API
+  views.py            业务视图(页面 + 接口实现)
   config.py           .env / 环境变量配置
 ```

@@ -48,6 +48,7 @@ flowchart LR
 | 模块/目录 | 职责 | 入口 |
 | --- | --- | --- |
 | `common/readers` | MySQL / PostgreSQL / Doris 元数据读取 | 服务内部 |
+| `api/` | 对外 REST 接口: 路由 `api/urls.py`(挂载 /api/metadata/), 视图复用 `common/views` | REST API |
 | `common/services/sync` | 元数据入库(幂等 upsert) | `POST /api/metadata/sync/`, `manage.py sync_metadata` |
 | `common/services/schema_check` | MySQL vs Doris 结构一致性校验 | `POST /api/metadata/datax/check/` |
 | `common/services/schema_sync` | 自动 DDL: 新增/删除/修改字段, 自动建表 | `POST /api/metadata/schema-sync/`, `manage.py schema_sync` |

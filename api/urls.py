@@ -1,3 +1,4 @@
+"""对外 REST 接口路由(挂载于 /api/metadata/)。"""
 from django.urls import path
 
 from . import views
