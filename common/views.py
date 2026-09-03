@@ -848,6 +848,7 @@ def flink_sync_apply(request):
             job_name,
             doris_sync=bool((payload or {}).get("doris_sync", True)),
             force_structure=bool((payload or {}).get("force_structure", False)),
+            resume=bool((payload or {}).get("resume", True)),
         )
     except Exception as exc:
         return _fail(f"执行失败: {exc}", code=500, status=500)

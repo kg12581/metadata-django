@@ -113,7 +113,7 @@ function renderJob(j) {
 }
 
 async function jobAction(job, action) {
-  if (action === 'apply' && !confirm('将执行: savepoint 停止作业 -> 重新生成 SQL -> 重启。确定吗？')) return;
+  if (action === 'apply' && !confirm('将执行: 结构比对 -> savepoint 停止 -> 对齐 Doris -> 重新生成 SQL -> 从 savepoint 恢复重启。确定吗？')) return;
   showSync({ job: job, action: action, message: '处理中...' });
   try {
     const resp = await fetch('/api/metadata/flink-sync/' + action + '/', {

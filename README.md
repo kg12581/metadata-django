@@ -33,6 +33,7 @@
 - 脚本管理平台: 集中浏览/编辑/运行 shell 与 python 脚本(/scripts/)
 - 自动化测试: pytest 套件(见 `testcase/`), 含 HTML 报告与页面截图
 - 同步前结构比对闸门: DataX / Flink SQL 同步前比对源表 vs 目标表结构, 不一致默认拦截(可 force)
+- Flink 结构变化自动修复: 监控发现变化 -> savepoint 停止 -> 对齐 Doris -> 从 savepoint 恢复(不丢数据)
 
 ### 测试与报告
 

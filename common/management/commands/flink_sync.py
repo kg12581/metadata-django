@@ -25,13 +25,45 @@ class Command(BaseCommand):
         parser.add_argument("--generate", action="store_true", help="只重新生成 SQL, 不停作业")
         parser.add_argument("--apply", action="store_true", help="完整流程: Doris 结构同步 -> savepoint 停止 -> 生成 SQL -> 提交")
         parser.add_argument(
+            "--auto-repair", action="store_true",
+            help="监控启用 auto_repair 的作业: 发现结构变化 -> savepoint 停止 -> 对齐结构 -> 从 savepoint 恢复",
+        )
+        parser.add_argument("--no-resume", dest="resume", action="store_false", default=True,
+                            help="apply/auto-repair 时不从 savepoint 恢复")
+        parser.add_argument(
             "--no-doris-sync", dest="doris_sync", action="store_false", default=True,
             help="apply 时不自动同步 Doris 结构",
         )
 
     def handle(self, *args, **options):
         if options["apply"]:
-            result = apply_job(options["job"], doris_sync=options["doris_sync"])
+            result = apply_job(
+                options["job"],
+                doris_sync=options["doris_sync"],
+                resume=options["resume"],
+            )
+        elif options["auto_repair"]:
+            from common.services.flink_sync import load_jobs_config, monitor_job, apply_job as _apply
+
+            flink_cfg = load_jobs_config()
+            repaired = []
+            for job in flink_cfg["jobs"]:
+                if not job.get("auto_repair"):
+                    continue
+                status = monitor_job(job, flink_cfg)
+                if status.get("error"):
+                    repaired.append({"job": job["name"], "error": status["error"]})
+                    continue
+                if status.get("first_time") or status.get("changed") or status.get("has_difference"):
+                    result_item = _apply(job["name"], doris_sync=options["doris_sync"], resume=options["resume"])
+                    repaired.append({
+                        "job": job["name"],
+                        "steps": [s["step"] for s in result_item["steps"]],
+                        "blocked": any(s["step"] == "blocked" for s in result_item["steps"]),
+                    })
+                else:
+                    repaired.append({"job": job["name"], "changed": False})
+            result = {"auto_repair": repaired}
         elif options["generate"]:
             result = generate_job(options["job"])
         else:

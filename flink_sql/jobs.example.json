@@ -8,6 +8,7 @@
     {
       "name": "pg-debezium-kafka-to-doris",
       "pipeline_name": "pg-debezium-kafka-to-doris",
+      "auto_repair": true,
       "sql_file": "postgresql_debezium_kafka2doris.sql",
       "generated_file": "generated/postgresql_debezium_kafka2doris_runtime.sql",
       "source_type": "postgresql_debezium",

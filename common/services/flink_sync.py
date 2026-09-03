@@ -150,7 +150,8 @@ def signature_hash(signatures: list[dict]) -> str:
 
 # ---------------------------------------------------------------- SQL 生成
 
-def generate_runtime_sql(job: dict, columns: list[dict]) -> str:
+def generate_runtime_sql(job: dict, columns: list[dict],
+                         savepoint_path: str | None = None) -> str:
     source_type = job["source_type"]
     source_table = "pg_kafka_source" if source_type == "postgresql_debezium" else "mysql_kafka_source"
     sink_table = "doris_target"
@@ -174,6 +175,8 @@ def generate_runtime_sql(job: dict, columns: list[dict]) -> str:
         "SET 'table.exec.source.idle-timeout' = '60s';",
         "",
     ]
+    if savepoint_path:
+        lines.insert(-1, f"SET 'execution.savepoint.path' = '{savepoint_path}';")
 
     lines.append(f"CREATE TABLE {source_table} (")
     for column in columns:
@@ -375,6 +378,7 @@ def stop_with_savepoint(job_name: str, flink_cfg: dict, savepoint_dir: str) -> d
                 state = (sb.get("status") or {}).get("id")
                 if state == "COMPLETED":
                     result["savepoint_state"] = "COMPLETED"
+                    result["location"] = sb.get("location")
                     return result
                 if state == "FAILED":
                     result["ok"] = False
@@ -387,6 +391,24 @@ def stop_with_savepoint(job_name: str, flink_cfg: dict, savepoint_dir: str) -> d
             return result
     result["savepoint_state"] = "TIMEOUT"
     return result
+
+
+def latest_savepoint_location(job_name: str, flink_cfg: dict, savepoint_dir: str) -> str | None:
+    """尝试通过 Flink REST 查询作业最近一次 savepoint 位置。"""
+    running = job_running_state(job_name, flink_cfg)
+    jobid = running.get("jobid") if running.get("ok") else None
+    if not jobid:
+        return None
+    try:
+        status, body = _rest_get(flink_cfg["flink_rest"], f"/jobs/{jobid}/checkpoints")
+        if status != 200:
+            return None
+        latest = (body.get("latest") or {}).get("savepoint")
+        if latest:
+            return latest.get("location")
+    except Exception:
+        pass
+    return None
 
 
 def submit_sql(job: dict, sql_file: Path, flink_cfg: dict) -> dict:
@@ -451,7 +473,8 @@ def generate_job(job_name: str | None = None) -> dict:
 
 
 def apply_job(job_name: str, *, doris_sync: bool = True,
-              check_structure: bool = True, force_structure: bool = False) -> dict:
+              check_structure: bool = True, force_structure: bool = False,
+              resume: bool = True) -> dict:
     """完整流程: (可选)Doris 结构同步 -> savepoint 停止 -> 生成 SQL -> 提交。"""
     flink_cfg = load_jobs_config()
     job = next((j for j in flink_cfg["jobs"] if j["name"] == job_name), None)
@@ -515,9 +538,21 @@ def apply_job(job_name: str, *, doris_sync: bool = True,
     # 3) 生成 SQL
     columns = fetch_source_columns(job)
     signatures = columns_signature(columns, job["source_type"])
-    sql = generate_runtime_sql(job, columns)
+    savepoint_path = stop.get("location") or (
+        latest_savepoint_location(job["name"], flink_cfg,
+                                  flink_cfg.get("savepoint_dir", "file:///data/flink/savepoint"))
+        if resume else None
+    )
+    sql = generate_runtime_sql(
+        job, columns, savepoint_path=savepoint_path if resume else None
+    )
     path = save_generated_sql(job, sql, signatures)
-    result["steps"].append({"step": "generate_sql", "sql_file": str(path), "columns": len(columns)})
+    result["steps"].append({
+        "step": "generate_sql",
+        "sql_file": str(path),
+        "columns": len(columns),
+        "resume_from_savepoint": savepoint_path,
+    })
 
     # 4) 提交
     submit = submit_sql(job, path, flink_cfg)
