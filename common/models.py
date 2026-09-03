@@ -6,6 +6,9 @@ from .fields import EncryptedCharField
 class DatabaseType(models.TextChoices):
     POSTGRESQL = "postgresql", "PostgreSQL"
     MYSQL = "mysql", "MySQL"
+    OCEANBASE = "oceanbase", "OceanBase"
+    GAUSSDB = "gaussdb", "GaussDB"
+    DWS = "dws", "GaussDB(DWS)"
     ODPS = "odps", "MaxCompute(ODPS)"
 
 
@@ -23,6 +26,9 @@ class SourceType(models.TextChoices):
     DORIS = "doris", "Doris"
     SQLSERVER = "sqlserver", "SQL Server"
     KAFKA = "kafka", "Kafka"
+    OCEANBASE = "oceanbase", "OceanBase"
+    GAUSSDB = "gaussdb", "GaussDB"
+    DWS = "dws", "GaussDB(DWS)"
     ODPS = "odps", "MaxCompute(ODPS)"
     OTHER = "other", "其他"
 

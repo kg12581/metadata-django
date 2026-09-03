@@ -69,7 +69,12 @@
     .nav-group.open .nav-toggle,
     .nav-group.current .nav-toggle { color: #fff; }
     .nav-group.current .nav-toggle { box-shadow: inset 0 -3px 0 #3b82f6; }
+    .nav-group:hover .dropdown,
+    .nav-group.open .dropdown { display: block; }
+    .nav-group:hover .caret,
+    .nav-group.open .caret { transform: rotate(180deg); }
     .caret { font-size: 10px; opacity: .8; }
+    .nav-icon { margin-right: 5px; font-size: 15px; line-height: 1; }
     .dropdown {
       display: none;
       position: absolute;
@@ -110,6 +115,9 @@
         background: #f8fafc;
       }
     }
+    .header-right { margin-left: auto; }
+    .header-right .nav-toggle { color: #94a3b8; }
+    .header-right .nav-toggle:hover { color: #fff; }
     .container { max-width: 1100px; margin: 24px auto; padding: 0 16px; }
     .card {
       background: #fff;
@@ -178,57 +186,53 @@
     <a class="brand" href="/">元数据管理平台</a>
     <nav class="nav-scroll" id="mainNav">
       <div class="nav-group" data-match="/">
-        <a class="nav-toggle" href="/">数据总览</a>
-      </div>
-      <div class="nav-group" data-match="/ai-sql/">
-        <a class="nav-toggle" href="/ai-sql/">AI 写 SQL</a>
-      </div>
-      <div class="nav-group" data-match="/spark2sql/">
-        <a class="nav-toggle" href="/spark2sql/">Spark 转 Hive</a>
-      </div>
-      <div class="nav-group" data-match="/oracle2hive/">
-        <a class="nav-toggle" href="/oracle2hive/">Oracle 转 Hive</a>
-      </div>
-      <div class="nav-group" data-match="/scheduler/">
-        <a class="nav-toggle" href="/scheduler/">调度中心</a>
+        <a class="nav-toggle" href="/"><span class="nav-icon">🏠</span>数据总览</a>
       </div>
       <div class="nav-group" data-match="/sources/,/sql-helper/,/databases/,/tables/">
-        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">元数据 <span class="caret">▾</span></button>
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)"><span class="nav-icon">🗄️</span>元数据 <span class="caret">▾</span></button>
         <div class="dropdown">
           <a href="/">数据源总览</a>
           <a href="/sources/">数据源配置(JDBC)</a>
           <a href="/sql-helper/">SQL 助手</a>
+        </div>
+      </div>
+      <div class="nav-group" data-match="/ai-sql/,/spark2sql/,/oracle2hive/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)"><span class="nav-icon">🤖</span>AI 助手 <span class="caret">▾</span></button>
+        <div class="dropdown">
           <a href="/ai-sql/">AI 写 SQL</a>
           <a href="/spark2sql/">Spark 转 Hive</a>
           <a href="/oracle2hive/">Oracle 转 Hive</a>
         </div>
       </div>
-      <div class="nav-group" data-match="/schema-sync/,/datax/,/etl/,/flink-sql/">
-        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">数据同步 <span class="caret">▾</span></button>
+      <div class="nav-group" data-match="/scheduler/,/schema-sync/,/datax/,/etl/,/flink-sql/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)"><span class="nav-icon">🔄</span>数据同步 <span class="caret">▾</span></button>
         <div class="dropdown">
-          <a href="/schema-sync/">结构同步任务</a>
           <a href="/scheduler/">调度中心</a>
+          <a href="/schema-sync/">结构同步任务</a>
           <a href="/datax/">DataX 同步</a>
           <a href="/etl/">ETL 管理</a>
           <a href="/flink-sql/">Flink SQL</a>
         </div>
       </div>
       <div class="nav-group" data-match="/reconcile/,/sql-files/,/lineage/">
-        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">质量治理 <span class="caret">▾</span></button>
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)"><span class="nav-icon">🧪</span>质量治理 <span class="caret">▾</span></button>
         <div class="dropdown">
           <a href="/reconcile/">对账中心</a>
           <a href="/sql-files/">SQL 文件库</a>
           <a href="/lineage/">SQL 血缘</a>
         </div>
       </div>
-      <div class="nav-group" data-match="/ops/,/scripts/,/docs/">
-        <button class="nav-toggle" type="button" onclick="toggleGroup(this)">平台运营 <span class="caret">▾</span></button>
+      <div class="nav-group" data-match="/ops/,/scripts/">
+        <button class="nav-toggle" type="button" onclick="toggleGroup(this)"><span class="nav-icon">📊</span>平台运营 <span class="caret">▾</span></button>
         <div class="dropdown">
           <a href="/ops/">运营看板</a>
           <a href="/scripts/">脚本管理</a>
           <a href="/docs/">在线文档</a>
           <a href="/docs/?file=04-api-reference.md">API 文档</a>
         </div>
+      </div>
+      <div class="nav-group header-right" data-match="/docs/">
+        <a class="nav-toggle" href="/docs/"><span class="nav-icon">📄</span>文档</a>
       </div>
     </nav>
   </header>

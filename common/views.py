@@ -768,6 +768,9 @@ JDBC_TEMPLATES = {
     "sqlserver": "jdbc:sqlserver://{host}:{port};databaseName={database}",
     "kafka": "kafka://{host}:{port}",
     "odps": "jdbc:odps:{host}",
+    "oceanbase": "jdbc:oceanbase://{host}:{port}/{database}",
+    "gaussdb": "jdbc:postgresql://{host}:{port}/{database}",
+    "dws": "jdbc:postgresql://{host}:{port}/{database}",
     "other": "",
 }
 
@@ -780,7 +783,13 @@ DEFAULT_PORTS = {
     "sqlserver": 1433,
     "kafka": 9092,
     "odps": 443,
+    "oceanbase": 2881,
+    "gaussdb": 5432,
+    "dws": 8000,
 }
+
+MYSQL_LIKE_TYPES = {"mysql", "oceanbase"}
+POSTGRES_LIKE_TYPES = {"postgresql", "gaussdb", "dws"}
 
 
 def _build_jdbc_url(db_type: str, host: str, port, database: str) -> str:
@@ -906,7 +915,7 @@ def source_test(request, pk):
     if not host:
         return _fail("未配置 host, 无法测试", code=400, status=400)
     try:
-        if source.db_type in ("mysql", "doris"):
+        if source.db_type in MYSQL_LIKE_TYPES or source.db_type == "doris":
             import pymysql
             conn = pymysql.connect(
                 host=host,
@@ -918,7 +927,7 @@ def source_test(request, pk):
             )
             conn.close()
             return _ok({"ok": True}, message="连接成功")
-        if source.db_type == "postgresql":
+        if source.db_type in POSTGRES_LIKE_TYPES:
             import psycopg2
             conn = psycopg2.connect(
                 host=host,
@@ -955,9 +964,9 @@ def source_test(request, pk):
 @csrf_exempt
 @require_POST
 def source_sync_metadata(request, pk):
-    """用配置的连接信息同步元数据(支持 mysql / postgresql)。"""
+    """用配置的连接信息同步元数据(mysql/oceanbase / pg/gaussdb/dws / odps)。"""
     source = get_object_or_404(MetadataSourceConfig, pk=pk)
-    if source.db_type not in ("mysql", "postgresql", "odps"):
+    if source.db_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"odps"}:
         return _fail(f"{source.db_type} 暂不支持元数据自动同步", code=400, status=400)
     if source.db_type == "odps":
         config = {
@@ -968,6 +977,29 @@ def source_sync_metadata(request, pk):
             "password": source.password,
             "database": source.database_name,
             "schema": source.database_name or "default",
+            "name": source.name,
+        }
+        try:
+            database, stats = sync_metadata(config)
+        except Exception as exc:
+            return _fail(f"同步失败: {exc}", code=500, status=500)
+        return _ok(
+            {"database": database_to_dict(database), "stats": stats},
+            message=f"同步完成: 表 {stats['tables']}, 字段 {stats['columns']}",
+        )
+    if source.db_type in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES:
+        config = {
+            "db_type": source.db_type,
+            "host": source.host,
+            "port": source.port or DEFAULT_PORTS.get(source.db_type),
+            "user": source.username,
+            "password": source.password,
+            "database": source.database_name,
+            "schema": (
+                source.schema_name or "public"
+                if source.db_type in POSTGRES_LIKE_TYPES
+                else source.schema_name or None
+            ),
             "name": source.name,
         }
         try:

@@ -240,7 +240,14 @@ def run_task(task: ReconcileTask, persist: bool = True) -> ReconcileRun:
     details: list[dict] = []
     try:
         source_config = task.source_config
-        source_type = (source_config.db_type if source_config else "mysql")
+        raw_source_type = (source_config.db_type if source_config else "mysql")
+        source_type = (
+            "mysql"
+            if raw_source_type in ("mysql", "oceanbase")
+            else "postgresql"
+            if raw_source_type in ("postgresql", "gaussdb", "dws")
+            else raw_source_type
+        )
         src = source_connection(source_config, task.source_db_name)
         if src is None:
             raise ValueError("任务未关联源配置(source_config)")

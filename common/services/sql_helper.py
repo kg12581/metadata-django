@@ -5,7 +5,7 @@ from ..models import MetadataColumn, MetadataDatabase, MetadataTable
 
 
 def quote_name(name: str, db_type: str) -> str:
-    if db_type == "postgresql":
+    if db_type in ("postgresql", "gaussdb", "dws"):
         return '"' + str(name).replace('"', '""') + '"'
     return "`" + str(name).replace("`", "``") + "`"
 

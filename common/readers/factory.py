@@ -7,6 +7,10 @@ READERS: dict[str, type[MetadataReader]] = {
     PostgreSQLReader.DB_TYPE: PostgreSQLReader,
     MySQLReader.DB_TYPE: MySQLReader,
     ODPSReader.DB_TYPE: ODPSReader,
+    # 国产数据库协议兼容: OceanBase(MySQL 协议), GaussDB/DWS(PostgreSQL 协议)
+    "oceanbase": MySQLReader,
+    "gaussdb": PostgreSQLReader,
+    "dws": PostgreSQLReader,
 }
 
 

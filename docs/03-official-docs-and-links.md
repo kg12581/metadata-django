@@ -44,6 +44,12 @@
 - pyodps(Python SDK)文档: <https://pyodps.readthedocs.io/zh-cn/stable/>
 - ODPS JDBC 说明: <https://www.alibabacloud.com/help/zh/maxcompute/user-guide/jdbc>
 
+### 国产数据库
+
+- OceanBase 官方文档: <https://www.oceanbase.com/docs>
+- 华为云 GaussDB: <https://www.huaweicloud.com/product/gaussdb.html>
+- 华为云 GaussDB(DWS) 数据仓库: <https://www.huaweicloud.com/product/dws.html>
+
 ### 编排 / 调度
 
 - Apache DolphinScheduler(中文文档): <https://dolphinscheduler.apache.org/zh-cn/docs/latest>
