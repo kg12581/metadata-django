@@ -309,7 +309,7 @@ def check_job_structure(job: dict, flink_cfg: dict | None = None) -> dict:
         job["source_table"],
         doris_config={
             "host": job["doris_host"],
-            "port": job.get("doris_fe_http_port", 9030),
+            "port": job.get("doris_fe_mysql_port", 9030),  # FE MySQL 端口(结构读取用)
             "user": job.get("doris_user", "root"),
             "password": job.get("doris_password", ""),
             "database": job["doris_database"],
@@ -475,7 +475,7 @@ def generate_job(job_name: str | None = None) -> dict:
 def apply_job(job_name: str, *, doris_sync: bool = True,
               check_structure: bool = True, force_structure: bool = False,
               resume: bool = True) -> dict:
-    """完整流程: (可选)Doris 结构同步 -> savepoint 停止 -> 生成 SQL -> 提交。"""
+    """完整流程: 结构比对闸门 -> savepoint 停止 -> 对齐 Doris -> 复核 -> 从 savepoint 恢复提交。"""
     flink_cfg = load_jobs_config()
     job = next((j for j in flink_cfg["jobs"] if j["name"] == job_name), None)
     if job is None:
@@ -495,47 +495,58 @@ def apply_job(job_name: str, *, doris_sync: bool = True,
             })
             return result
 
-    # 1) Doris 结构同步(仅 MySQL 源支持自动; PG 提示人工)
-    if doris_sync:
-        if job["source_db"].get("db_type") == "mysql":
-            from .schema_sync import sync_table_schema
-            mysql_config = {
-                "db_type": "mysql",
-                "host": job["source_db"]["host"],
-                "port": job["source_db"].get("port", 3306),
-                "user": job["source_db"].get("user", ""),
-                "password": job["source_db"].get("password", ""),
-                "database": job["source_db"]["database"],
-            }
-            doris_config = {
-                "host": job["doris_host"],
-                "port": job.get("doris_fe_http_port", 8030),
-                "user": job.get("doris_user", "root"),
-                "password": job.get("doris_password", ""),
-                "database": job["doris_database"],
-            }
-            plan = sync_table_schema(
-                mysql_config,
-                doris_config,
-                job["source_db"]["database"],
-                job["source_table"],
-                doris_database=job["doris_database"],
-                preview=False,
-            )
-            result["steps"].append({"step": "doris_schema_sync", **plan})
-        else:
-            result["steps"].append(
-                {"step": "doris_schema_sync", "skipped": True,
-                 "message": "PG 源结构同步暂不支持自动执行, 请确认 Doris 表结构已更新"}
-            )
-
-    # 2) savepoint 停止
+    # 1) 先 savepoint 停止(避免修改 Doris 结构期间作业持续写入)
     stop = stop_with_savepoint(job["name"], flink_cfg, flink_cfg.get("savepoint_dir", "file:///data/flink/savepoint"))
     result["steps"].append({"step": "stop_with_savepoint", **stop})
     if not stop.get("ok"):
         return result
 
-    # 3) 生成 SQL
+    # 2) 停止后对齐 Doris 结构(通用源 mysql/pg 协议/oracle 等)
+    if doris_sync:
+        source = job["source_db"]
+        source_type = source.get("db_type", "mysql")
+        supported = {"mysql", "oceanbase", "postgresql", "gaussdb", "dws", "opengauss", "oracle"}
+        if source_type in supported:
+            from .schema_sync import sync_table_schema
+
+            doris_config = {
+                "host": job["doris_host"],
+                "port": job.get("doris_fe_mysql_port", 9030),  # FE MySQL 端口, 用于执行 DDL
+                "user": job.get("doris_user", "root"),
+                "password": job.get("doris_password", ""),
+                "database": job["doris_database"],
+            }
+            try:
+                plan = sync_table_schema(
+                    source,
+                    doris_config,
+                    source.get("database", ""),
+                    job["source_table"],
+                    doris_database=job["doris_database"],
+                    source_type=source_type,
+                    preview=False,
+                )
+            except Exception as exc:
+                plan = {"error": str(exc)}
+            result["steps"].append({"step": "doris_schema_sync", **plan})
+        else:
+            result["steps"].append(
+                {"step": "doris_schema_sync", "skipped": True,
+                 "message": f"{source_type} 源暂不支持自动结构对齐, 请人工确认 Doris 表结构"}
+            )
+
+    # 3) 修复后复核闸门; 仍不一致则保持停止状态, 不提交恢复
+    if check_structure and not force_structure:
+        after = check_job_structure(job, flink_cfg)
+        result["steps"].append({"step": "structure_check_after_fix", **after})
+        if not after["consistent"]:
+            result["steps"].append({
+                "step": "blocked",
+                "message": "修复后结构仍不一致, 作业保持停止(savepoint 已保存), 未恢复提交; 请人工处理",
+            })
+            return result
+
+    # 4) 生成 SQL(注入 savepoint 恢复路径)
     columns = fetch_source_columns(job)
     signatures = columns_signature(columns, job["source_type"])
     savepoint_path = stop.get("location") or (
@@ -554,7 +565,7 @@ def apply_job(job_name: str, *, doris_sync: bool = True,
         "resume_from_savepoint": savepoint_path,
     })
 
-    # 4) 提交
+    # 5) 提交(从 savepoint 恢复)
     submit = submit_sql(job, path, flink_cfg)
     result["steps"].append({"step": "submit", **submit})
     return result

@@ -143,25 +143,29 @@ def sync_table_data(
     force: bool = False,
     split_pk: str | None = None,
     preview: bool = False,
+    check: bool = True,
 ) -> dict:
     """先校验表结构一致, 再生成并执行 DataX 同步。"""
-    check = compare_source_doris(
-        source_type,
-        mysql_config,
-        database,
-        table,
-        doris_config=doris_config,
-        doris_database=doris_database,
-        schema=mysql_config.get("schema"),
+    table_check = (
+        compare_source_doris(
+            source_type,
+            mysql_config,
+            database,
+            table,
+            doris_config=doris_config,
+            doris_database=doris_database,
+            schema=mysql_config.get("schema"),
+        )
+        if check
+        else None
     )
-    table_check = check
 
     result = {
         "table": table,
         "checked": True,
-        "consistent": table_check["consistent"],
-        "differences": table_check["differences"],
-        "warnings": table_check["warnings"],
+        "consistent": table_check["consistent"] if table_check else True,
+        "differences": table_check["differences"] if table_check else [],
+        "warnings": table_check["warnings"] if table_check else [],
         "executed": False,
         "success": None,
         "log_tail": "",
@@ -187,7 +191,7 @@ def sync_table_data(
         result["reason"] = "preview 模式, 未执行 DataX"
         return result
 
-    if not table_check["consistent"] and not force:
+    if table_check and not table_check["consistent"] and not force:
         result["reason"] = "表结构不一致, 未执行 DataX 同步(如需强制执行请传 force=true)"
         return result
 

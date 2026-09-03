@@ -26,6 +26,7 @@
       "kafka_bootstrap_servers": "192.168.3.100:9092",
       "doris_host": "192.168.3.100",
       "doris_fe_http_port": 8030,
+      "doris_fe_mysql_port": 9030,
       "doris_user": "root",
       "doris_password": "",
       "doris_database": "test_db",

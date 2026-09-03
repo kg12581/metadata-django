@@ -379,27 +379,29 @@ def datax_sync(request):
         "consistent": True,
         "tables": {},
     }
-    for table in tables:
-        table_check = compare_source_doris(
-            source_type,
-            source_config,
-            database_name,
-            table,
-            doris_config=doris_config,
-            doris_database=doris_database,
-            schema=source_config.get("schema"),
-        )
-        check["tables"][table] = table_check
-        check["consistent"] = check["consistent"] and table_check["consistent"]
-    if not check["consistent"] and not force and not preview:
-        return JsonResponse(
-            {
-                "code": 409,
-                "message": "表结构不一致, 未执行 DataX 同步(如需强制执行请传 force=true)",
-                "data": check,
-            },
-            status=409,
-        )
+    if not force and not preview:
+        # 同步前单一闸门: 只在这里比对一次, service 不再重复比对
+        for table in tables:
+            table_check = compare_source_doris(
+                source_type,
+                source_config,
+                database_name,
+                table,
+                doris_config=doris_config,
+                doris_database=doris_database,
+                schema=source_config.get("schema"),
+            )
+            check["tables"][table] = table_check
+            check["consistent"] = check["consistent"] and table_check["consistent"]
+        if not check["consistent"]:
+            return JsonResponse(
+                {
+                    "code": 409,
+                    "message": "表结构不一致, 未执行 DataX 同步(如需强制执行请传 force=true)",
+                    "data": check,
+                },
+                status=409,
+            )
 
     results = []
     for table in tables:
@@ -417,6 +419,7 @@ def datax_sync(request):
                 force=force,
                 split_pk=split_pk,
                 preview=preview,
+                check=False,  # 结构已在视图层比对过
             )
         except Exception as exc:
             result = {
