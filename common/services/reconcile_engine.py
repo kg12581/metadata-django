@@ -10,6 +10,7 @@ from ..models import ReconcileRun, ReconcileTask
 from .reconcile import (
     count_doris_table,
     count_mysql_table,
+    count_oracle_table,
     count_pg_table,
 )
 
@@ -17,9 +18,17 @@ from .reconcile import (
 def source_connection(source_config, database: str) -> dict | None:
     if source_config is None:
         return None
+    db_type = source_config.db_type
+    default_port = (
+        1521
+        if db_type == "oracle"
+        else 5432
+        if db_type in ("postgresql", "gaussdb", "dws")
+        else 3306
+    )
     return {
         "host": source_config.host,
-        "port": source_config.port or 3306,
+        "port": source_config.port or default_port,
         "user": source_config.username or "",
         "password": source_config.password or "",
         "database": database or source_config.database_name,
@@ -35,6 +44,23 @@ def _query(conn_config: dict, sql: str, db_type: str = "mysql") -> list[tuple]:
             with conn.cursor() as cursor:
                 cursor.execute(sql)
                 return cursor.fetchall()
+        finally:
+            conn.close()
+    if db_type == "oracle":
+        import oracledb
+
+        conn = oracledb.connect(
+            user=conn_config.get("user", ""),
+            password=conn_config.get("password", ""),
+            dsn=(
+                f"{conn_config['host']}:{conn_config.get('port', 1521)}/"
+                f"{conn_config.get('database', '')}"
+            ),
+        )
+        try:
+            with conn.cursor() as cursor:
+                cursor.execute(sql)
+                return list(cursor.fetchall())
         finally:
             conn.close()
     import pymysql
@@ -56,6 +82,8 @@ def _row_count(source_type: str, src: dict, database: str, schema: str, table: s
                target: dict, target_db: str) -> dict:
     if source_type == "postgresql":
         source_count = count_pg_table(src, database, schema or "public", table)
+    elif source_type == "oracle":
+        source_count = count_oracle_table(src, database, table)
     else:
         source_count = count_mysql_table(src, database, table)
     try:
@@ -174,6 +202,7 @@ def _metadata(source_type: str, src: dict, database: str, schema: str, table: st
               target: dict, target_db: str) -> dict:
     from ..readers.doris import DorisReader
     from ..readers.mysql import MySQLReader
+    from ..readers.oracle import OracleReader
     from ..readers.postgresql import PostgreSQLReader
 
     try:
@@ -184,6 +213,13 @@ def _metadata(source_type: str, src: dict, database: str, schema: str, table: st
             )
             with reader:
                 source_cols = reader.list_columns(schema or "public", table)
+        elif source_type == "oracle":
+            reader = OracleReader(
+                host=src["host"], port=src.get("port", 1521), user=src.get("user", ""),
+                password=src.get("password", ""), database=database, timeout=10,
+            )
+            with reader:
+                source_cols = reader.list_columns(schema or "", table)
         else:
             reader = MySQLReader(
                 host=src["host"], port=src.get("port", 3306), user=src.get("user", ""),
@@ -262,7 +298,7 @@ def run_task(task: ReconcileTask, persist: bool = True) -> ReconcileRun:
             "database": doris_cfg["database"] or task.target_db_name,
         }
         target_db = doris_cfg["database"] or task.target_db_name
-        if source_type not in ("mysql", "postgresql"):
+        if source_type not in ("mysql", "postgresql", "oracle"):
             raise ValueError(f"源类型暂不支持: {source_type}")
         handler = HANDLERS[task.task_type]
 

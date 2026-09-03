@@ -5,6 +5,8 @@ from common.services.schema_sync import (
     build_create_statement,
     column_ddl,
     diff_columns,
+    map_oracle_type_to_doris,
+    map_pg_type_to_doris,
     map_mysql_type_to_doris,
 )
 
@@ -95,3 +97,18 @@ def test_normalize_type():
     assert normalize_type("tinyint(1)") == "boolean"
     assert normalize_type("BOOLEAN") == "boolean"
     assert normalize_type("decimal(10, 2)") == "decimal(10,2)"
+
+
+def test_map_pg_type_to_doris():
+    assert map_pg_type_to_doris({"data_type": "integer"}) == "INT"
+    assert map_pg_type_to_doris({"data_type": "bigint"}) == "BIGINT"
+    assert map_pg_type_to_doris({"data_type": "numeric", "numeric_precision": 10, "numeric_scale": 2}) == "DECIMAL(10,2)"
+    assert map_pg_type_to_doris({"data_type": "character varying", "max_length": 255}) == "VARCHAR(255)"
+    assert map_pg_type_to_doris({"data_type": "timestamp with time zone"}) == "DATETIME"
+
+
+def test_map_oracle_type_to_doris():
+    assert map_oracle_type_to_doris({"data_type": "number", "numeric_precision": 10, "numeric_scale": 2}) == "DECIMAL(10,2)"
+    assert map_oracle_type_to_doris({"data_type": "number"}) == "DOUBLE"
+    assert map_oracle_type_to_doris({"data_type": "varchar2", "max_length": 100}) == "VARCHAR(100)"
+    assert map_oracle_type_to_doris({"data_type": "timestamp"}) == "DATETIME"

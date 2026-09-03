@@ -75,6 +75,22 @@ def count_doris_table(config: dict, database: str, table: str) -> int:
         conn.close()
 
 
+def count_oracle_table(config: dict, service: str, table: str) -> int:
+    import oracledb
+
+    conn = oracledb.connect(
+        user=config.get("user", ""),
+        password=config.get("password", ""),
+        dsn=f"{config['host']}:{config.get('port', 1521)}/{service or config.get('database', '')}",
+    )
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(f'SELECT COUNT(*) FROM "{_check_identifier(table)}"')
+            return int(cursor.fetchone()[0])
+    finally:
+        conn.close()
+
+
 def reconcile_table(
     source_type: str,
     source_config: dict,

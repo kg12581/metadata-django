@@ -413,17 +413,37 @@ def datax_sync(request):
 @csrf_exempt
 @require_POST
 def schema_sync(request):
-    """根据 MySQL 元数据自动对齐 Doris 表结构(新增/删除/修改字段, 不存在自动建表)。
+    """按源端元数据自动对齐 Doris 表结构(新增/删除/修改字段, 不存在自动建表)。
 
-    请求体: {database, table|tables, doris_database, preview=true(默认), drop_columns=true, auto_create=true}
+    请求体: {source_id(数据源配置) 或 database/连接, table|tables, doris_database,
+    preview=true(默认), drop_columns=true, auto_create=true}
     """
     payload, err = _parse_json_body(request)
     if err:
         return _fail(err, code=400, status=400)
 
-    mysql_config = get_database_config(payload)
-    if mysql_config["db_type"] != "mysql":
-        return _fail("结构同步仅支持 MySQL 作为源库", code=400, status=400)
+    if payload.get("source_id"):
+        source = get_object_or_404(MetadataSourceConfig, pk=payload["source_id"])
+        if source.db_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"oracle"}:
+            return _fail(f"{source.db_type} 暂不支持结构同步", code=400, status=400)
+        source_type = source.db_type
+        source_config = {
+            "db_type": source_type,
+            "host": source.host,
+            "port": source.port or DEFAULT_PORTS.get(source_type),
+            "user": source.username,
+            "password": source.password,
+            "database": source.database_name,
+            "schema": source.schema_name
+            or ("public" if source_type in POSTGRES_LIKE_TYPES else ""),
+        }
+        database_name = source.database_name
+    else:
+        source_config = get_database_config(payload)
+        source_type = source_config["db_type"]
+        if source_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"oracle"}:
+            return _fail("结构同步仅支持 mysql/pg 协议或 oracle 源", code=400, status=400)
+        database_name = source_config["database"]
     tables, err = _tables_from_payload(payload)
     if err:
         return _fail(err, code=400, status=400)
@@ -437,11 +457,12 @@ def schema_sync(request):
     for table in tables:
         try:
             result = sync_table_schema(
-                mysql_config,
+                source_config,
                 doris_config,
-                mysql_config["database"],
+                database_name,
                 table,
                 doris_database=payload.get("doris_database"),
+                source_type=source_type,
                 preview=preview,
                 drop_columns=drop_columns,
                 auto_create=auto_create,
@@ -950,6 +971,17 @@ def source_test(request, pk):
             )
             next(iter(odps.list_tables()), None)  # 触发一次元数据请求验证连通性
             return _ok({"ok": True, "project": source.database_name}, message="ODPS 连接成功")
+        if source.db_type == "oracle":
+            import oracledb
+
+            dsn = f"{host}:{port or 1521}/{source.database_name or ''}"
+            conn = oracledb.connect(
+                user=source.username or "",
+                password=source.password,
+                dsn=dsn,
+            )
+            conn.close()
+            return _ok({"ok": True, "service": source.database_name}, message="Oracle 连接成功")
         # 其余类型: TCP 连通性 + 提示
         import socket
         with socket.create_connection((host, port or 0), timeout=5):
@@ -966,7 +998,7 @@ def source_test(request, pk):
 def source_sync_metadata(request, pk):
     """用配置的连接信息同步元数据(mysql/oceanbase / pg/gaussdb/dws / odps)。"""
     source = get_object_or_404(MetadataSourceConfig, pk=pk)
-    if source.db_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"odps"}:
+    if source.db_type not in MYSQL_LIKE_TYPES | POSTGRES_LIKE_TYPES | {"odps", "oracle"}:
         return _fail(f"{source.db_type} 暂不支持元数据自动同步", code=400, status=400)
     if source.db_type == "odps":
         config = {

@@ -6,6 +6,7 @@ from .fields import EncryptedCharField
 class DatabaseType(models.TextChoices):
     POSTGRESQL = "postgresql", "PostgreSQL"
     MYSQL = "mysql", "MySQL"
+    ORACLE = "oracle", "Oracle"
     OCEANBASE = "oceanbase", "OceanBase"
     GAUSSDB = "gaussdb", "GaussDB"
     DWS = "dws", "GaussDB(DWS)"
