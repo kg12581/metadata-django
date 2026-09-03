@@ -7,6 +7,7 @@ doris_sql/generated/
 hive_sql/generated/
 logs/
 .idea/
+/.github/
 __pycache__/
 *.pyc
 db.sqlite3
