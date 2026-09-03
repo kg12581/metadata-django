@@ -29,7 +29,14 @@ from .models import (
 )
 from .serializers import database_to_dict, source_config_to_dict, table_to_dict
 from .services.datax_sync import sync_table_data
-from .services.flink_sync import apply_job, check_all_jobs, check_job_structure, generate_job
+from .services.flink_sync import (
+    apply_job,
+    check_all_jobs,
+    check_job_structure,
+    generate_job,
+    run_auto_repair,
+    set_job_auto_repair,
+)
 from .services import docs as docs_service
 from .services import lineage as lineage_service
 from .services import llm as llm_service
@@ -879,6 +886,40 @@ def flink_sync_structure_check(request):
     except Exception as exc:
         return _fail(f"比对失败: {exc}", code=500, status=500)
     return _ok(result, message="结构一致" if result["consistent"] else "结构不一致")
+
+
+@csrf_exempt
+@require_POST
+def flink_sync_auto_repair(request):
+    """立即执行自动修复(监控结构变化 -> savepoint 停止 -> 对齐 -> 恢复)。"""
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    try:
+        result = run_auto_repair(
+            (payload or {}).get("job"),
+            doris_sync=bool((payload or {}).get("doris_sync", True)),
+        )
+    except Exception as exc:
+        return _fail(f"自动修复失败: {exc}", code=500, status=500)
+    return _ok(result, message="自动修复执行完成")
+
+
+@csrf_exempt
+@require_POST
+def flink_sync_config_save(request):
+    """保存作业配置(如 auto_repair 开关)。"""
+    payload, err = _parse_json_body(request)
+    if err:
+        return _fail(err, code=400, status=400)
+    job_name = (payload or {}).get("job")
+    if not job_name or "auto_repair" not in (payload or {}):
+        return _fail("缺少 job/auto_repair 参数", code=400, status=400)
+    try:
+        result = set_job_auto_repair(job_name, bool(payload["auto_repair"]))
+    except Exception as exc:
+        return _fail(f"保存失败: {exc}", code=500, status=500)
+    return _ok(result, message="作业配置已保存")
 
 
 # ---------------------------------------------------------------- 元数据源配置

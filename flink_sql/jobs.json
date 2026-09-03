@@ -31,7 +31,9 @@
       "doris_password": "",
       "doris_database": "test_db",
       "doris_table": "orders",
-      "primary_keys": ["id"]
+      "primary_keys": [
+        "id"
+      ]
     },
     {
       "name": "mysql-canal-kafka-to-doris",
@@ -56,7 +58,10 @@
       "doris_password": "",
       "doris_database": "test_db",
       "doris_table": "users",
-      "primary_keys": ["id"]
+      "primary_keys": [
+        "id"
+      ],
+      "auto_repair": false
     }
   ]
 }

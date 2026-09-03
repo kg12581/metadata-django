@@ -2,15 +2,21 @@
 {% block title %}DataX 同步 - 元数据管理平台{% endblock %}
 {% block content %}
 <div class="card">
-  <h2 style="margin:0 0 4px">DataX 同步 (MySQL -> Doris)</h2>
-  <div class="muted">先校验表结构一致, 再执行 DataX 同步表数据; 校验不一致默认拒绝执行</div>
+  <h2 style="margin:0 0 4px">DataX 同步 -> Doris</h2>
+  <div class="muted">同步前先比对源表与目标表结构, 一致才执行(全量=TRUNCATE 覆盖 / 增量=splitPk 分片); 支持 MySQL/PG/Oracle/ClickHouse 等源</div>
 </div>
 
 <div class="card">
   <h3>同步配置</h3>
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;max-width:900px">
     <div>
-      <label class="muted">MySQL 源库</label>
+      <label class="muted">数据源(可选, 用已配置连接)</label>
+      <select id="cfgSource" onchange="onSourceChange()" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
+        <option value="">(手动连接, 默认 MySQL)</option>
+      </select>
+    </div>
+    <div>
+      <label class="muted">源库(未选数据源时)</label>
       <input type="text" id="cfgDatabase" placeholder="如 ai_chatbot" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:14px">
     </div>
     <div>
@@ -37,6 +43,7 @@
   <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
     <button class="btn ghost" onclick="dataxCheck()">结构校验</button>
     <button class="btn ghost" onclick="dataxPreview()">生成 job 预览</button>
+    <button class="btn" onclick="dataxCompareAndSync()">比对后同步</button>
     <button class="btn" onclick="dataxSync()">执行同步</button>
   </div>
 </div>
@@ -49,15 +56,34 @@
 
 {% block extra_js %}
 <script>
+async function loadSourceOptions() {
+  const resp = await fetch('/api/metadata/sources/');
+  const data = await resp.json();
+  const sel = document.getElementById('cfgSource');
+  (data.data || []).forEach(s => {
+    const o = document.createElement('option');
+    o.value = s.id;
+    o.textContent = '[' + s.db_type + '] ' + s.name + ' / ' + s.database_name;
+    sel.appendChild(o);
+  });
+}
+function onSourceChange() {
+  const sid = document.getElementById('cfgSource').value;
+  document.getElementById('cfgDatabase').disabled = !!sid;
+  document.getElementById('cfgDorisDb').disabled = !!sid;
+}
+
 function payload() {
-  return {
-    database: document.getElementById('cfgDatabase').value.trim(),
+  const sid = document.getElementById('cfgSource').value;
+  const base = {
     table: document.getElementById('cfgTable').value.trim(),
     doris_database: document.getElementById('cfgDorisDb').value.trim() || null,
     channel: parseInt(document.getElementById('cfgChannel').value || '3'),
     truncate: document.getElementById('cfgTruncate').checked,
     force: document.getElementById('cfgForce').checked
   };
+  if (sid) return { source_id: sid, ...base };
+  return { database: document.getElementById('cfgDatabase').value.trim(), ...base };
 }
 
 function showResult(data) {
@@ -91,5 +117,26 @@ async function dataxSync() {
   const data = await call('sync', { ...payload(), preview: false });
   showResult(data);
 }
+
+async function dataxCompareAndSync() {
+  showResult({ message: '先比对表结构...' });
+  const checkResp = await fetch('/api/metadata/datax/check/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload())
+  });
+  const check = await checkResp.json();
+  const consistent = check.data && check.data.consistent;
+  if (!consistent) {
+    showResult({ code: 409, message: '表结构不一致, 未执行同步; 请先解决差异或勾选 force', data: check.data || null });
+    return;
+  }
+  if (!confirm('结构一致, 确认执行 DataX 同步？')) return;
+  showResult({ message: '同步中, 请稍候...' });
+  const data = await call('sync', { ...payload(), preview: false, force: false });
+  showResult(data);
+}
+
+loadSourceOptions();
 </script>
 {% endblock %}

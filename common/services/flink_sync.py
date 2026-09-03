@@ -278,6 +278,7 @@ def monitor_job(job: dict, flink_cfg: dict) -> dict:
         "diff": diff,
         "has_difference": bool(diff["add"] or diff["drop"] or diff["modify"]),
         "running": job_running_state(job["name"], flink_cfg),
+        "auto_repair": bool(job.get("auto_repair", False)),
         "declared_columns": declared,
         "current_columns": signatures,
     }
@@ -470,6 +471,49 @@ def generate_job(job_name: str | None = None) -> dict:
         except Exception as exc:
             results.append({"job": job["name"], "error": str(exc)})
     return {"results": results}
+
+
+def set_job_auto_repair(job_name: str, enabled: bool) -> dict:
+    flink_cfg = load_jobs_config()
+    job = next((j for j in flink_cfg["jobs"] if j["name"] == job_name), None)
+    if job is None:
+        raise ValueError(f"未找到作业: {job_name}")
+    job["auto_repair"] = bool(enabled)
+    JOBS_PATH.write_text(
+        json.dumps(flink_cfg, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    return {"job": job_name, "auto_repair": bool(enabled)}
+
+
+def run_auto_repair(job_name: str | None = None, *, doris_sync: bool = True,
+                    resume: bool = True) -> dict:
+    """监控结构变化并自动修复(auto_repair=true 的作业, 或指定单个作业)。"""
+    flink_cfg = load_jobs_config()
+    repaired = []
+    for job in flink_cfg["jobs"]:
+        if job_name and job["name"] != job_name:
+            continue
+        if not job_name and not job.get("auto_repair"):
+            continue
+        try:
+            status = monitor_job(job, flink_cfg)
+        except Exception as exc:
+            repaired.append({"job": job["name"], "error": str(exc)})
+            continue
+        if status.get("error"):
+            repaired.append({"job": job["name"], "error": status["error"]})
+            continue
+        if status.get("first_time") or status.get("changed") or status.get("has_difference"):
+            result_item = apply_job(job["name"], doris_sync=doris_sync, resume=resume)
+            repaired.append({
+                "job": job["name"],
+                "steps": [s["step"] for s in result_item["steps"]],
+                "blocked": any(s["step"] == "blocked" for s in result_item["steps"]),
+            })
+        else:
+            repaired.append({"job": job["name"], "changed": False})
+    return {"auto_repair": repaired}
 
 
 def apply_job(job_name: str, *, doris_sync: bool = True,

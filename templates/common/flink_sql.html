@@ -107,16 +107,40 @@ function renderJob(j) {
   };
   makeBtn('生成 SQL', 'ghost', () => jobAction(j.job, 'generate'));
   makeBtn('结构比对', 'ghost', () => jobAction(j.job, 'check'));
+  makeBtn('立即修复', 'ghost', () => jobAction(j.job, 'repair'));
   makeBtn('执行变更并重启', '', () => jobAction(j.job, 'apply'));
   card.appendChild(buttons);
+  const autoRow = document.createElement('div');
+  autoRow.style.cssText = 'display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px';
+  const autoCheck = document.createElement('input');
+  autoCheck.type = 'checkbox';
+  autoCheck.checked = !!j.auto_repair;
+  autoCheck.onchange = () => saveAutoRepair(j.job, autoCheck.checked);
+  const autoLabel = document.createElement('label');
+  autoLabel.style.cssText = 'cursor:pointer;display:flex;align-items:center;gap:6px';
+  autoLabel.appendChild(autoCheck);
+  autoLabel.appendChild(document.createTextNode('自动修复: 定时监控结构变化 -> savepoint 停止 -> 对齐 Doris -> 恢复(不丢数据)'));
+  autoRow.appendChild(autoLabel);
+  card.appendChild(autoRow);
   list.appendChild(card);
+}
+
+async function saveAutoRepair(job, enabled) {
+  const resp = await fetch('/api/metadata/flink-sync/config/save/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ job: job, auto_repair: enabled })
+  });
+  showSync(await resp.json());
+  loadJobs();
 }
 
 async function jobAction(job, action) {
   if (action === 'apply' && !confirm('将执行: 结构比对 -> savepoint 停止 -> 对齐 Doris -> 重新生成 SQL -> 从 savepoint 恢复重启。确定吗？')) return;
   showSync({ job: job, action: action, message: '处理中...' });
   try {
-    const resp = await fetch('/api/metadata/flink-sync/' + action + '/', {
+    const endpoint = action === 'repair' ? 'auto-repair' : action;
+    const resp = await fetch('/api/metadata/flink-sync/' + endpoint + '/', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ job: job, doris_sync: true })

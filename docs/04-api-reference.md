@@ -55,6 +55,8 @@ curl -X POST http://127.0.0.1:8000/api/metadata/datax/sync/ \
 | GET | `/flink-sync/jobs/` | 作业状态与结构差异 |
 | POST | `/flink-sync/generate/` | 重新生成运行时 SQL |
 | POST | `/flink-sync/check/` | 启动前比对 源表 vs Doris 目标表结构 |
+| POST | `/flink-sync/auto-repair/` | 立即执行自动修复(auto_repair 作业或指定 job) |
+| POST | `/flink-sync/config/save/` | 保存作业配置(如 `auto_repair` 开关) |
 | POST | `/flink-sync/apply/` | 结构比对通过后: savepoint 停止 -> 对齐结构 -> 生成 SQL -> 从 savepoint 恢复重启(`force_structure=true` 跳过比对, `resume=false` 不从 savepoint 恢复) |
 
 ## 5. 数据源配置
