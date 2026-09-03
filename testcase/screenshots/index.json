@@ -1,0 +1,87 @@
+[
+  {
+    "name": "ai_sql",
+    "file": "testcase/screenshots/ai_sql.png",
+    "size_kb": 64.5
+  },
+  {
+    "name": "dashboard",
+    "file": "testcase/screenshots/dashboard.png",
+    "size_kb": 69.2
+  },
+  {
+    "name": "datax",
+    "file": "testcase/screenshots/datax.png",
+    "size_kb": 72.9
+  },
+  {
+    "name": "docs",
+    "file": "testcase/screenshots/docs.png",
+    "size_kb": 135.5
+  },
+  {
+    "name": "etl",
+    "file": "testcase/screenshots/etl.png",
+    "size_kb": 81.7
+  },
+  {
+    "name": "flink_sql",
+    "file": "testcase/screenshots/flink_sql.png",
+    "size_kb": 90.9
+  },
+  {
+    "name": "lineage",
+    "file": "testcase/screenshots/lineage.png",
+    "size_kb": 54.7
+  },
+  {
+    "name": "ops",
+    "file": "testcase/screenshots/ops.png",
+    "size_kb": 92.1
+  },
+  {
+    "name": "oracle2hive",
+    "file": "testcase/screenshots/oracle2hive.png",
+    "size_kb": 61.2
+  },
+  {
+    "name": "reconcile",
+    "file": "testcase/screenshots/reconcile.png",
+    "size_kb": 99.2
+  },
+  {
+    "name": "scheduler",
+    "file": "testcase/screenshots/scheduler.png",
+    "size_kb": 48.0
+  },
+  {
+    "name": "schema_sync",
+    "file": "testcase/screenshots/schema_sync.png",
+    "size_kb": 97.8
+  },
+  {
+    "name": "scripts",
+    "file": "testcase/screenshots/scripts.png",
+    "size_kb": 92.7
+  },
+  {
+    "name": "sources",
+    "file": "testcase/screenshots/sources.png",
+    "size_kb": 97.6
+  },
+  {
+    "name": "spark2hive",
+    "file": "testcase/screenshots/spark2hive.png",
+    "size_kb": 90.6
+  },
+  {
+    "name": "sql_files",
+    "file": "testcase/screenshots/sql_files.png",
+    "size_kb": 51.1
+  },
+  {
+    "name": "sql_helper",
+    "file": "testcase/screenshots/sql_helper.png",
+    "size_kb": 89.0
+  }
+]
